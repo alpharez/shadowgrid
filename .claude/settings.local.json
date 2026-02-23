@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmake:*)",
+      "Bash(sudo apt-get install:*)",
+      "Bash(make:*)"
+    ]
+  }
+}
