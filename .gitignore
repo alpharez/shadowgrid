@@ -1,5 +1,6 @@
-# Design docs
+# Design docs (keep README.md)
 /*.md
+!README.md
 
 # Build output
 build/
