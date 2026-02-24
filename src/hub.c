@@ -37,18 +37,20 @@ static ShopItem shop_items[] = {
 /* Fields: name, type, rarity, value, stat_bonus, range, mod_count, mods[] */
 static Item shop_gear[] = {
     /* ---- WEAPONS --------------------------------------------------- */
-    /* Melee / sidearms */
+    /* Melee */
     { "Knuckle Dusters",  ITEM_WEAPON, RARITY_COMMON,     150, 1,  0, 0, {{0}} },
-    { "Cheap Pistol",     ITEM_WEAPON, RARITY_COMMON,     200, 1,  0, 0, {{0}} },
+    { "Switchblade",      ITEM_WEAPON, RARITY_COMMON,     200, 1,  0, 0, {{0}} },
     { "Ceramic Knife",    ITEM_WEAPON, RARITY_COMMON,     250, 1,  0, 1, {{ 0, 1, "+1 STL" }} },
     { "Baton",            ITEM_WEAPON, RARITY_COMMON,     300, 2,  0, 0, {{0}} },
     { "Combat Knife",     ITEM_WEAPON, RARITY_COMMON,     300, 2,  0, 0, {{0}} },
-    { "Revolver",         ITEM_WEAPON, RARITY_COMMON,     350, 2,  0, 0, {{0}} },
-    { "Silenced Pistol",  ITEM_WEAPON, RARITY_UNCOMMON,   375, 1,  0, 1, {{ 0, 1, "+1 STL" }} },
-    { "Combat Pistol",    ITEM_WEAPON, RARITY_COMMON,     400, 2,  0, 0, {{0}} },
-    { "Heavy Pistol",     ITEM_WEAPON, RARITY_UNCOMMON,   525, 3,  0, 0, {{0}} },
+    { "Vibroblade",       ITEM_WEAPON, RARITY_COMMON,     350, 2,  0, 0, {{0}} },
+    { "Shadow Blade",     ITEM_WEAPON, RARITY_UNCOMMON,   375, 1,  0, 1, {{ 0, 1, "+1 STL" }} },
+    { "Shock Glove",      ITEM_WEAPON, RARITY_COMMON,     400, 2,  0, 0, {{0}} },
+    { "Stun Maul",        ITEM_WEAPON, RARITY_UNCOMMON,   525, 3,  0, 0, {{0}} },
     { "Micro SMG",        ITEM_WEAPON, RARITY_UNCOMMON,   600, 3,  0, 0, {{0}} },
     { "SMG",              ITEM_WEAPON, RARITY_UNCOMMON,   700, 3,  0, 0, {{0}} },
+    { "Carbon Whip",      ITEM_WEAPON, RARITY_UNCOMMON,   700, 3,  0, 0, {{0}} },
+    { "Neural Lash",      ITEM_WEAPON, RARITY_RARE,       800, 3,  0, 1, {{ 1, 1, "+1 HCK" }} },
     { "Katana",           ITEM_WEAPON, RARITY_RARE,       900, 4,  0, 0, {{0}} },
     { "Shotgun",          ITEM_WEAPON, RARITY_UNCOMMON,  1000, 4,  0, 0, {{0}} },
     { "Monowire",         ITEM_WEAPON, RARITY_RARE,      1300, 5,  0, 0, {{0}} },

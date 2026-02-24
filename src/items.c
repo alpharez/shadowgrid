@@ -74,17 +74,19 @@ typedef struct {
 } BaseItem;
 
 static const BaseItem BASE_WEAPONS[] = {
-    /* --- Melee / sidearms (range = 0) -------------------------------- */
+    /* --- Melee (range = 0) ------------------------------------------- */
     { "Knuckle Dusters",  1,   150,  0 },  /* bare-fist backup          */
-    { "Cheap Pistol",     1,   200,  0 },  /* mass-produced junk        */
+    { "Switchblade",      1,   200,  0 },  /* cheap folding street blade */
     { "Ceramic Knife",    1,   250,  0 },  /* silent, undetectable      */
     { "Baton",            2,   300,  0 },  /* non-lethal option         */
     { "Combat Knife",     2,   300,  0 },  /* reliable field blade      */
-    { "Revolver",         2,   350,  0 },  /* dependable wheel-gun      */
-    { "Combat Pistol",    2,   400,  0 },  /* standard sidearm          */
-    { "Heavy Pistol",     3,   500,  0 },  /* big bore stopping power   */
+    { "Vibroblade",       2,   350,  0 },  /* vibrating mono-edge       */
+    { "Shock Glove",      2,   400,  0 },  /* electrified strike        */
+    { "Stun Maul",        3,   500,  0 },  /* heavy EM stunner          */
     { "Micro SMG",        3,   600,  0 },  /* compact spray             */
     { "SMG",              3,   700,  0 },  /* full-size submachine gun  */
+    { "Carbon Whip",      3,   700,  0 },  /* reinforced cutting whip   */
+    { "Neural Lash",      3,   800,  0 },  /* neural-disrupting flail   */
     { "Katana",           4,   900,  0 },  /* mono-edge steel           */
     { "Shotgun",          4,  1000,  0 },  /* pump-action devastation   */
     { "Combat Shotgun",   4,  1050,  0 },  /* military auto-shotgun     */
@@ -97,7 +99,7 @@ static const BaseItem BASE_WEAPONS[] = {
     { "Needle Rifle",     3,   950, 14 },  /* long-range, quiet         */
     { "Sniper Rifle",     5,  1600, 18 },  /* extreme range, lethal     */
 };
-#define BASE_WEAPONS_COUNT 20
+#define BASE_WEAPONS_COUNT 22
 
 static const BaseItem BASE_HEADS[] = {
     { "Street Helmet",    1,  150 },
