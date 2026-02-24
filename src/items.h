@@ -58,8 +58,10 @@ int         item_rarity_color(Rarity r);    /* returns COL_RARITY_* pair index (
 EquipSlot   item_equip_slot(ItemType t);    /* maps type to its equip slot */
 bool        item_valid(const Item *it);     /* type != ITEM_NONE */
 
-/* Consumable factory */
-Item item_make_medkit(void);   /* Common, heals 5 HP, value 150¢ */
+/* Consumable factories */
+Item item_make_stimpack(void);   /* Common,   heals  2 HP, value  60¢ */
+Item item_make_medkit(void);     /* Common,   heals  5 HP, value 150¢ */
+Item item_make_trauma_kit(void); /* Uncommon, heals  8 HP, value 280¢ */
 
 /* Loot generation */
 Rarity item_roll_rarity(int difficulty);              /* weighted random; difficulty 0-5 */

@@ -227,6 +227,7 @@ void render_status(const Entity *e, const GuardList *gl,
                    bool gp_avail, int gp_timer,
                    bool door_locked, bool extract_locked,
                    const NetrunnerState *nr,
+                   const ChromeState *cr,
                    const char *msg)
 {
     move(MAP_HEIGHT, 0);
@@ -344,8 +345,31 @@ void render_status(const Entity *e, const GuardList *gl,
         }
     }
 
+    /* Chrome ability indicators */
+    if (cr) {
+        if (cr->reaper_active) {
+            attron(COLOR_PAIR(COL_GUARD_ALERT) | A_BOLD);
+            printw("  [REAPER!]");
+            attroff(COLOR_PAIR(COL_GUARD_ALERT) | A_BOLD);
+        } else if (cr->reaper_avail) {
+            attron(COLOR_PAIR(COL_MENU_DIM) | A_BOLD);
+            printw("  [REAP RDY]");
+            attroff(COLOR_PAIR(COL_MENU_DIM) | A_BOLD);
+        }
+        if (cr->suppressive_avail) {
+            attron(COLOR_PAIR(COL_MENU_DIM) | A_BOLD);
+            printw("  [SUPP RDY]");
+            attroff(COLOR_PAIR(COL_MENU_DIM) | A_BOLD);
+        }
+        if (cr->chrome_rush_avail) {
+            attron(COLOR_PAIR(COL_MENU_DIM) | A_BOLD);
+            printw("  [RUSH RDY]");
+            attroff(COLOR_PAIR(COL_MENU_DIM) | A_BOLD);
+        }
+    }
+
     attron(COLOR_PAIR(COL_STATUS) | A_BOLD);
-    printw("  [hjkl] move  [i] inv  [f] fire  [m] medkit  [x] hack  [t] btime  [g] ghost  [v] vent  [>] extract  [q] hub");
+    printw("  [hjkl/yubn]mv [c]crch [f]fire [s]supp [r]rush [R]reap [m]med [x]hack [t]bt [g]ghost [v]vent [q]hub");
     attroff(COLOR_PAIR(COL_STATUS) | A_BOLD);
 
     /* One-turn feedback message on the line below the status bar */

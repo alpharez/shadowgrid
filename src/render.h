@@ -5,6 +5,7 @@
 #include "guard.h"
 #include "projectile.h"
 #include "netrunner.h"
+#include "chrome.h"
 
 /* Colour pair indices (defined in render.c, initialised by render_init) */
 #define COL_FLOOR_VIS   1  /* bright floor */
@@ -60,4 +61,5 @@ void render_status(const Entity *e, const GuardList *gl,
                    bool gp_avail, int gp_timer,
                    bool door_locked, bool extract_locked,
                    const NetrunnerState *nr,
+                   const ChromeState *cr,
                    const char *msg);

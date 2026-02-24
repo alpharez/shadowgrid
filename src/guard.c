@@ -250,13 +250,18 @@ bool guard_player_attack(GuardList *gl, int x, int y, int dmg, int px, int py,
 
         g->hp -= dmg;
         if (g->hp <= 0) {
-            /* Normal: 50% loot; elite: 75% loot */
+            /* Normal guards: 50% loot chance; elite guards: 75% loot chance.
+             * Loot type: 40% stim pack, 40% med kit, 20% trauma kit. */
             if (drop) {
-                int threshold = g->elite ? 4 : 2;
-                if (rand() % 4 < threshold)
-                    *drop = item_make_medkit();
-                else
+                int threshold = g->elite ? 3 : 2;
+                if (rand() % 4 < threshold) {
+                    int roll = rand() % 5;
+                    if      (roll < 2) *drop = item_make_stimpack();
+                    else if (roll < 4) *drop = item_make_medkit();
+                    else               *drop = item_make_trauma_kit();
+                } else {
                     memset(drop, 0, sizeof(*drop));
+                }
             }
             /* Remove by swapping with the last guard in the list */
             gl->guards[i] = gl->guards[gl->count - 1];

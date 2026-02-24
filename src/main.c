@@ -11,6 +11,7 @@
 #include "render.h"
 #include "projectile.h"
 #include "netrunner.h"
+#include "chrome.h"
 #include "hub.h"
 
 /* Returns true if any of the 8 neighbours of (x, y) blocks sight (is a wall). */
@@ -44,7 +45,8 @@ static bool handle_input(int ch, Entity *player, Map *map,
                          GuardList *guards, bool *quick_draw_avail,
                          bool *vent_used, bool *bt_avail, bool *bt_active,
                          bool *gp_avail, int *gp_timer,
-                         bool *done, char *msg, NetrunnerState *nr)
+                         bool *done, char *msg, NetrunnerState *nr,
+                         ChromeState *cr)
 {
     int dx = 0, dy = 0;
 
@@ -305,10 +307,111 @@ static bool handle_input(int ch, Entity *player, Map *map,
         snprintf(msg, 80, "GOD MODE -- full network control, all systems compromised");
         return false;
 
+    case 's': case 'S': {
+        /* Suppressive Fire: CHROME tree (2), tier 2, option 0.
+         * Lay down covering fire — pin all currently-visible guards for 2 turns.
+         * Requires a ranged weapon; once per mission; costs a turn. */
+        if (!cr->suppressive_avail) return false;
+        if (player->equipped[EQUIP_WEAPON].range <= 0) return false;
+        {
+            int hit = 0;
+            for (int i = 0; i < guards->count; i++) {
+                Guard *g = &guards->guards[i];
+                if (map->tiles[g->y][g->x].visible) {
+                    g->stun_timer = 2;
+                    hit++;
+                }
+            }
+            cr->suppressive_avail = false;
+            snprintf(msg, 80, "SUPPRESSIVE FIRE -- %d guard%s pinned",
+                     hit, hit == 1 ? "" : "s");
+        }
+        return true;
+    }
+
+    case 'r': {
+        /* Chrome Rush: CHROME tree (2), tier 3, option 0.
+         * Charge 3 tiles in the last movement direction, dealing ATK damage
+         * to any guard in the path and knocking them 1 tile back.
+         * Player advances through dead or knocked-back guards. Once/mission. */
+        if (!cr->chrome_rush_avail) return false;
+        if (cr->last_dx == 0 && cr->last_dy == 0) return false;
+        {
+            int rdx  = cr->last_dx, rdy = cr->last_dy;
+            int atk  = entity_gear_atk(player) + player->skills[SKILL_COMBAT];
+            int hits = 0;
+
+            for (int step = 0; step < 3; step++) {
+                int nx = player->x + rdx;
+                int ny = player->y + rdy;
+                if (map_is_blocked(map, nx, ny)) break;  /* stopped by wall */
+
+                if (guard_at(guards, nx, ny)) {
+                    /* Strike the guard */
+                    int before = guards->count;
+                    Item drop = {0};
+                    guard_player_attack(guards, nx, ny, atk,
+                                        player->x, player->y, &drop);
+                    if (item_valid(&drop))
+                        entity_inv_add(player, drop);
+                    hits++;
+
+                    bool guard_dead = (guards->count < before);
+                    bool advanced   = false;
+
+                    if (guard_dead) {
+                        /* Guard dead — advance through */
+                        player->x = nx;
+                        player->y = ny;
+                        advanced  = true;
+                    } else {
+                        /* Guard alive — try to knock them back */
+                        for (int i = 0; i < guards->count; i++) {
+                            Guard *g = &guards->guards[i];
+                            if (g->x != nx || g->y != ny) continue;
+                            int kx = nx + rdx, ky = ny + rdy;
+                            if (!map_is_blocked(map, kx, ky) &&
+                                !guard_at(guards, kx, ky)) {
+                                g->x = kx;
+                                g->y = ky;
+                                player->x = nx;
+                                player->y = ny;
+                                advanced = true;
+                            }
+                            break;
+                        }
+                    }
+                    if (!advanced) break;  /* guard blocked the path */
+                } else {
+                    player->x = nx;
+                    player->y = ny;
+                }
+            }
+            cr->chrome_rush_avail = false;
+            snprintf(msg, 80, "CHROME RUSH -- %d guard%s struck",
+                     hits, hits == 1 ? "" : "s");
+        }
+        return true;
+    }
+
+    case 'R': {
+        /* REAPER: CHROME tree (2), tier 4, option 0.
+         * Activate REAPER mode — every kill this mission grants a free action
+         * (guard tick skipped), chainable. Once per mission to activate. */
+        if (!cr->reaper_avail || cr->reaper_active) return false;
+        cr->reaper_avail  = false;
+        cr->reaper_active = true;
+        snprintf(msg, 80, "REAPER ACTIVATED -- kills grant bonus actions");
+        return false;  /* free action to activate */
+    }
+
     case 'f': {
         /* Ranged fire: requires an equipped weapon with range > 0.
          * Auto-aims at the nearest guard visible in the player's FOV.
-         * Fires a 3-dart flechette burst with slight lateral spread. */
+         * Fires a 3-dart flechette burst with slight lateral spread.
+         *
+         * Iron Grip   (CHROME T1 opt2): +1 ATK on ranged attacks.
+         * Precise Shot (CHROME T3 opt1): surviving target also stunned+disarmed. */
         if (player->equipped[EQUIP_WEAPON].range <= 0)
             return false;  /* melee weapon or empty slot — no shot */
 
@@ -326,6 +429,10 @@ static bool handle_input(int ch, Entity *player, Map *map,
         if (tgt_x < 0) return false;  /* no visible target in range */
 
         int dmg = entity_gear_atk(player) + player->skills[SKILL_COMBAT];
+
+        /* Iron Grip: CHROME (2), tier 0, opt 2 — steady aim gives +1 ATK */
+        if (player->tree_bought[2][0] & (1 << 2))
+            dmg += 1;
 
         /* Noise: flechettes are near-silent but not truly quiet */
         for (int i = 0; i < guards->count; i++) {
@@ -359,11 +466,31 @@ static bool handle_input(int ch, Entity *player, Map *map,
         for (int i = 0; i < ndrop; i++)
             entity_inv_add(player, drops[i]);
 
+        /* Precise Shot: CHROME (2), tier 3, opt 1 — stun + disarm surviving target.
+         * Applied after the burst: if the guard is still alive at (tgt_x, tgt_y),
+         * freeze them 2 turns and disarm them 3 turns (called shot to limbs). */
+        if (player->tree_bought[2][3] & (1 << 1)) {
+            for (int i = 0; i < guards->count; i++) {
+                Guard *g = &guards->guards[i];
+                if (g->x == tgt_x && g->y == tgt_y) {
+                    g->stun_timer  = 2;
+                    g->disarm_timer = 3;
+                    break;
+                }
+            }
+        }
+
         return true;  /* costs a turn */
     }
 
     default:
         return false;
+    }
+
+    /* Record direction for Chrome Rush targeting */
+    if (dx != 0 || dy != 0) {
+        cr->last_dx = dx;
+        cr->last_dy = dy;
     }
 
     int nx = player->x + dx;
@@ -431,6 +558,23 @@ static GameState game_run(Map *map, Entity *player)
     /* Vanish: SHADOW (0), tier 3, opt 0 — instant de-aggro on LOS break */
     bool vanish = HAS_SKILL(0, 3, 0);
 
+    /* Shadow Meld: SHADOW (0), tier 1, opt 0 — standing still = invisible.
+     * Player position is compared before/after each turn to detect movement. */
+    bool shadow_meld = HAS_SKILL(0, 1, 0);
+
+    /* Predict Patrol: SHADOW (0), tier 2, opt 1 — see guard patrol waypoints. */
+    bool predict_patrol = HAS_SKILL(0, 2, 1);
+
+    /* Disguise Master: SHADOW (0), tier 3, opt 1 — guards take much longer to
+     * notice the player (simulates blending in as maintenance crew). +4 to the
+     * suspicion threshold on top of any Light Step multiplier. */
+    if (HAS_SKILL(0, 3, 1))
+        suspicion_max += 4;
+
+    /* Cat Fall: SHADOW (0), tier 3, opt 2 — silent movement; crouched detection
+     * range is reduced by 1 additional point (stacks with Wall Hug). */
+    bool cat_fall = HAS_SKILL(0, 3, 2);
+
     /* Quick Draw: CHROME tree (2), tier 0, option 0.
      * Starts available; consumed on first attack; re-arms when all guards
      * return to UNAWARE (i.e. between distinct encounters). */
@@ -452,6 +596,24 @@ static GameState game_run(Map *map, Entity *player)
      * gp_timer counts down each turn; while > 0 guards' detection range is 0. */
     bool gp_avail = HAS_SKILL(0, 4, 0);
     int  gp_timer = 0;
+
+    /* Counterattack: CHROME (2), tier 2, opt 1 — passive.
+     * When a hunting guard deals melee damage, player auto-strikes them back. */
+    bool counterattack = HAS_SKILL(2, 2, 1);
+
+    /* Pain Editor: CHROME (2), tier 2, opt 2 — passive.
+     * Without it: being below half HP makes the player harder to miss (+2 det).
+     * Pain Editor negates this wound penalty entirely. */
+    bool pain_editor = HAS_SKILL(2, 2, 2);
+
+    /* Chrome active abilities */
+    ChromeState cr;
+    cr.suppressive_avail = HAS_SKILL(2, 2, 0);  /* Suppressive Fire */
+    cr.chrome_rush_avail = HAS_SKILL(2, 3, 0);  /* Chrome Rush       */
+    cr.reaper_avail      = HAS_SKILL(2, 4, 0);  /* REAPER            */
+    cr.reaper_active     = false;
+    cr.last_dx           = 0;
+    cr.last_dy           = 0;
 
     /* --- Netrunner skill state --- */
     NetrunnerState nr;
@@ -488,6 +650,23 @@ static GameState game_run(Map *map, Entity *player)
         render_map(map);
         render_guards(&guards, map, nr.drone_buddy);
         render_entity(player);
+
+        /* Predict Patrol: SHADOW (0), tier 2, opt 1 — overlay guard patrol
+         * waypoints on the map as dim '+' markers on explored tiles. */
+        if (predict_patrol) {
+            for (int i = 0; i < guards.count; i++) {
+                const Guard *g = &guards.guards[i];
+                for (int wp = 0; wp < 2; wp++) {
+                    int wx = g->patrol[wp][0], wy = g->patrol[wp][1];
+                    if (map->tiles[wy][wx].visible || map->tiles[wy][wx].seen) {
+                        attron(COLOR_PAIR(COL_MENU_DIM));
+                        mvaddch(wy, wx, '+');
+                        attroff(COLOR_PAIR(COL_MENU_DIM));
+                    }
+                }
+            }
+        }
+
         /* Trap Master: show placed traps as yellow ^ if visible */
         for (int t = 0; t < nr.trap_count; t++) {
             if (map->tiles[nr.trap_y[t]][nr.trap_x[t]].visible) {
@@ -496,22 +675,36 @@ static GameState game_run(Map *map, Entity *player)
                 attroff(COLOR_PAIR(COL_GUARD_SUSPICIOUS) | A_BOLD);
             }
         }
+
         bool door_locked    = (map->tiles[map->door_y][map->door_x].type == TILE_DOOR);
         bool extract_locked = (map->tiles[map->stairs_y][map->stairs_x].type == TILE_STAIRS_LOCKED);
         render_status(player, &guards, bt_avail, bt_active, gp_avail, gp_timer,
-                      door_locked, extract_locked, &nr, game_msg);
+                      door_locked, extract_locked, &nr, &cr, game_msg);
         refresh();
         game_msg[0] = '\0';  /* clear after one displayed frame */
+
+        /* Snapshot position and guard count before input for post-turn analysis */
+        int old_px = player->x, old_py = player->y;
+        int guards_before = guards.count;
 
         int ch = getch();
         bool turn_used = handle_input(ch, player, map, &guards,
                                       &quick_draw_avail, &vent_used,
                                       &bt_avail, &bt_active,
                                       &gp_avail, &gp_timer,
-                                      &done, game_msg, &nr);
+                                      &done, game_msg, &nr, &cr);
 
         if (done)
             return GAME_STATE_HUB;
+
+        bool player_moved = (player->x != old_px || player->y != old_py);
+        bool killed_guard = (guards.count < guards_before);
+
+        /* REAPER: CHROME (2), tier 4, opt 0 — each kill grants a bonus action.
+         * Set bt_active so the guard tick is skipped after this turn, giving the
+         * player another free action to chain kills. */
+        if (cr.reaper_active && killed_guard)
+            bt_active = true;
 
         /* Guards only act when the player used a turn */
         if (turn_used) {
@@ -528,9 +721,21 @@ static GameState game_run(Map *map, Entity *player)
                 } else {
                     det = guard_detection_range(player->crouched,
                                                 player->skills[SKILL_STEALTH]);
+                    /* Shadow Meld: SHADOW (0), tier 1, opt 0 — standing still = 0 det */
+                    if (shadow_meld && !player_moved)
+                        det = 0;
                     /* Wall Hug: SHADOW (0), tier 1, opt 2 — adjacent wall -1 range */
                     if (HAS_SKILL(0, 1, 2) && near_wall(map, player->x, player->y))
                         det = det > 1 ? det - 1 : 1;
+                    /* Cat Fall: SHADOW (0), tier 3, opt 2 — crouched -1 range */
+                    if (cat_fall && player->crouched)
+                        det = det > 1 ? det - 1 : 1;
+                    /* Pain Editor: CHROME (2), tier 2, opt 2 — wound penalty.
+                     * Below half HP: bleeding/laboured breathing gives +2 detection.
+                     * Pain Editor negates this entirely. */
+                    if (!pain_editor && player->hp > 0 &&
+                            player->hp < player->max_hp / 2)
+                        det += 2;
                 }
                 int dmg = guard_tick_all(&guards, map, player->x, player->y,
                                          det, suspicion_max, suspicion_decay,
@@ -540,6 +745,30 @@ static GameState game_run(Map *map, Entity *player)
                 if (player->hp <= 0 && sw_avail) {
                     player->hp = 1;
                     sw_avail = false;
+                }
+
+                /* Counterattack: CHROME (2), tier 2, opt 1 — auto-strike on hit.
+                 * Find the adjacent hunting guard that dealt damage and counter them. */
+                if (dmg > 0 && counterattack) {
+                    for (int i = 0; i < guards.count; i++) {
+                        Guard *g = &guards.guards[i];
+                        if (g->state != GUARD_HUNTING) continue;
+                        int cdx = g->x - player->x;
+                        int cdy = g->y - player->y;
+                        if (cdx < 0) cdx = -cdx;
+                        if (cdy < 0) cdy = -cdy;
+                        if ((cdx > cdy ? cdx : cdy) == 1) {
+                            int cnt_dmg = entity_gear_atk(player) +
+                                          player->skills[SKILL_COMBAT];
+                            Item cnt_drop = {0};
+                            guard_player_attack(&guards, g->x, g->y, cnt_dmg,
+                                                player->x, player->y, &cnt_drop);
+                            if (item_valid(&cnt_drop))
+                                entity_inv_add(player, cnt_drop);
+                            snprintf(game_msg, 80, "COUNTERATTACK! (%d dmg)", cnt_dmg);
+                            break;
+                        }
+                    }
                 }
 
                 /* Trap Master: stun guards that walked onto a trap tile */
@@ -567,8 +796,6 @@ static GameState game_run(Map *map, Entity *player)
                 if (!quick_draw_avail && HAS_SKILL(2, 0, 0) &&
                         guard_max_state(&guards) == GUARD_UNAWARE)
                     quick_draw_avail = true;
-
-
             }
         }
 

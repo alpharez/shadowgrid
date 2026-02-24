@@ -34,31 +34,73 @@ static ShopItem shop_items[] = {
 /* Gear shop catalog                                                    */
 /* ------------------------------------------------------------------ */
 
+/* Fields: name, type, rarity, value, stat_bonus, range, mod_count, mods[] */
 static Item shop_gear[] = {
-    /* Weapons — fields: name, type, rarity, value, stat_bonus, range, mod_count, mods */
-    { "Cheap Pistol",    ITEM_WEAPON,     RARITY_COMMON,    200, 1,  0, 0, {{0,0,NULL}} },
-    { "Combat Knife",    ITEM_WEAPON,     RARITY_COMMON,    300, 2,  0, 0, {{0,0,NULL}} },
-    { "Silenced Pistol", ITEM_WEAPON,     RARITY_UNCOMMON,  350, 1,  0, 1, {{ 0, 1, "+1 STL" }} },
-    { "Combat Pistol",   ITEM_WEAPON,     RARITY_COMMON,    400, 2,  0, 0, {{0,0,NULL}} },
-    { "SMG",             ITEM_WEAPON,     RARITY_UNCOMMON,  700, 3,  0, 0, {{0,0,NULL}} },
-    { "Flechette Gun",   ITEM_WEAPON,     RARITY_UNCOMMON,  550, 2, 10, 0, {{0,0,NULL}} },
-    /* Head armour */
-    { "Street Helmet",   ITEM_ARMOR_HEAD, RARITY_COMMON,    150, 1,  0, 0, {{0,0,NULL}} },
-    { "Combat Helm",     ITEM_ARMOR_HEAD, RARITY_UNCOMMON,  350, 2,  0, 0, {{0,0,NULL}} },
-    /* Body armour */
-    { "Leather Jacket",  ITEM_ARMOR_BODY, RARITY_COMMON,    200, 1,  0, 0, {{0,0,NULL}} },
-    { "Combat Jacket",   ITEM_ARMOR_BODY, RARITY_UNCOMMON,  450, 2,  0, 0, {{0,0,NULL}} },
-    { "Ballistic Vest",  ITEM_ARMOR_BODY, RARITY_RARE,      750, 3,  0, 0, {{0,0,NULL}} },
-    /* Leg armour */
-    { "Cargo Pants",     ITEM_ARMOR_LEGS, RARITY_COMMON,    150, 1,  0, 0, {{0,0,NULL}} },
-    { "Combat Pants",    ITEM_ARMOR_LEGS, RARITY_UNCOMMON,  350, 2,  0, 0, {{0,0,NULL}} },
-    /* Decks */
-    { "Budget Deck",     ITEM_DECK,       RARITY_COMMON,    250, 1,  0, 0, {{0,0,NULL}} },
-    { "Standard Deck",   ITEM_DECK,       RARITY_UNCOMMON,  500, 2,  0, 0, {{0,0,NULL}} },
-    { "Pro Deck",        ITEM_DECK,       RARITY_RARE,      900, 3,  0, 0, {{0,0,NULL}} },
-    { "Ghost Rig",       ITEM_DECK,       RARITY_UNCOMMON,  700, 2,  0, 1, {{ 1, 1, "+1 HCK" }} },
-    /* Consumables */
-    { "Med Kit",         ITEM_CONSUMABLE, RARITY_COMMON,    150, 5,  0, 0, {{0,0,NULL}} },
+    /* ---- WEAPONS --------------------------------------------------- */
+    /* Melee / sidearms */
+    { "Knuckle Dusters",  ITEM_WEAPON, RARITY_COMMON,     150, 1,  0, 0, {{0}} },
+    { "Cheap Pistol",     ITEM_WEAPON, RARITY_COMMON,     200, 1,  0, 0, {{0}} },
+    { "Ceramic Knife",    ITEM_WEAPON, RARITY_COMMON,     250, 1,  0, 1, {{ 0, 1, "+1 STL" }} },
+    { "Baton",            ITEM_WEAPON, RARITY_COMMON,     300, 2,  0, 0, {{0}} },
+    { "Combat Knife",     ITEM_WEAPON, RARITY_COMMON,     300, 2,  0, 0, {{0}} },
+    { "Revolver",         ITEM_WEAPON, RARITY_COMMON,     350, 2,  0, 0, {{0}} },
+    { "Silenced Pistol",  ITEM_WEAPON, RARITY_UNCOMMON,   375, 1,  0, 1, {{ 0, 1, "+1 STL" }} },
+    { "Combat Pistol",    ITEM_WEAPON, RARITY_COMMON,     400, 2,  0, 0, {{0}} },
+    { "Heavy Pistol",     ITEM_WEAPON, RARITY_UNCOMMON,   525, 3,  0, 0, {{0}} },
+    { "Micro SMG",        ITEM_WEAPON, RARITY_UNCOMMON,   600, 3,  0, 0, {{0}} },
+    { "SMG",              ITEM_WEAPON, RARITY_UNCOMMON,   700, 3,  0, 0, {{0}} },
+    { "Katana",           ITEM_WEAPON, RARITY_RARE,       900, 4,  0, 0, {{0}} },
+    { "Shotgun",          ITEM_WEAPON, RARITY_UNCOMMON,  1000, 4,  0, 0, {{0}} },
+    { "Monowire",         ITEM_WEAPON, RARITY_RARE,      1300, 5,  0, 0, {{0}} },
+    /* Ranged */
+    { "Needler",          ITEM_WEAPON, RARITY_COMMON,     300, 1,  6, 1, {{ 0, 1, "+1 STL" }} },
+    { "Flechette Gun",    ITEM_WEAPON, RARITY_UNCOMMON,   550, 2, 10, 0, {{0}} },
+    { "Rail Pistol",      ITEM_WEAPON, RARITY_UNCOMMON,   700, 2,  8, 0, {{0}} },
+    { "Smart Pistol",     ITEM_WEAPON, RARITY_RARE,       800, 3,  8, 1, {{ 1, 1, "+1 HCK" }} },
+    { "Needle Rifle",     ITEM_WEAPON, RARITY_RARE,       950, 3, 14, 0, {{0}} },
+    { "Sniper Rifle",     ITEM_WEAPON, RARITY_EPIC,      1600, 5, 18, 0, {{0}} },
+    /* ---- HEAD ARMOUR ----------------------------------------------- */
+    { "Street Helmet",    ITEM_ARMOR_HEAD, RARITY_COMMON,     150, 1, 0, 0, {{0}} },
+    { "Urban Balaclava",  ITEM_ARMOR_HEAD, RARITY_COMMON,     200, 1, 0, 0, {{0}} },
+    { "Infiltrator Hood", ITEM_ARMOR_HEAD, RARITY_COMMON,     320, 1, 0, 1, {{ 0, 1, "+1 STL" }} },
+    { "Tactical Mask",    ITEM_ARMOR_HEAD, RARITY_COMMON,     300, 1, 0, 0, {{0}} },
+    { "Combat Helm",      ITEM_ARMOR_HEAD, RARITY_UNCOMMON,   350, 2, 0, 0, {{0}} },
+    { "Ballistic Visor",  ITEM_ARMOR_HEAD, RARITY_UNCOMMON,   450, 2, 0, 0, {{0}} },
+    { "Mil-Spec Helmet",  ITEM_ARMOR_HEAD, RARITY_RARE,       600, 3, 0, 0, {{0}} },
+    { "Cybernetic Crown", ITEM_ARMOR_HEAD, RARITY_RARE,       800, 3, 0, 1, {{ 1, 1, "+1 HCK" }} },
+    /* ---- BODY ARMOUR ----------------------------------------------- */
+    { "Runner's Vest",    ITEM_ARMOR_BODY, RARITY_COMMON,     200, 1, 0, 0, {{0}} },
+    { "Leather Jacket",   ITEM_ARMOR_BODY, RARITY_COMMON,     200, 1, 0, 0, {{0}} },
+    { "Corp Uniform",     ITEM_ARMOR_BODY, RARITY_COMMON,     250, 1, 0, 1, {{ 0, 1, "+1 STL" }} },
+    { "Combat Jacket",    ITEM_ARMOR_BODY, RARITY_UNCOMMON,   450, 2, 0, 0, {{0}} },
+    { "Tac Weave",        ITEM_ARMOR_BODY, RARITY_UNCOMMON,   500, 2, 0, 0, {{0}} },
+    { "Ballistic Vest",   ITEM_ARMOR_BODY, RARITY_RARE,       750, 3, 0, 0, {{0}} },
+    { "Exo-Partial",      ITEM_ARMOR_BODY, RARITY_RARE,       850, 3, 0, 1, {{ 2, 1, "+1 CMB" }} },
+    { "Heavy Plate",      ITEM_ARMOR_BODY, RARITY_EPIC,      1200, 4, 0, 0, {{0}} },
+    /* ---- LEG ARMOUR ------------------------------------------------ */
+    { "Cargo Pants",      ITEM_ARMOR_LEGS, RARITY_COMMON,     150, 1, 0, 0, {{0}} },
+    { "Urban Leggings",   ITEM_ARMOR_LEGS, RARITY_COMMON,     200, 1, 0, 0, {{0}} },
+    { "Combat Pants",     ITEM_ARMOR_LEGS, RARITY_UNCOMMON,   350, 2, 0, 0, {{0}} },
+    { "Stealth Runners",  ITEM_ARMOR_LEGS, RARITY_UNCOMMON,   450, 2, 0, 1, {{ 0, 1, "+1 STL" }} },
+    { "Grav Boots",       ITEM_ARMOR_LEGS, RARITY_UNCOMMON,   500, 2, 0, 0, {{0}} },
+    { "Tac. Greaves",     ITEM_ARMOR_LEGS, RARITY_RARE,       700, 3, 0, 0, {{0}} },
+    { "Exo-Legs",         ITEM_ARMOR_LEGS, RARITY_RARE,       800, 3, 0, 0, {{0}} },
+    /* ---- DECKS ----------------------------------------------------- */
+    { "Junk Rig",         ITEM_DECK, RARITY_COMMON,     180, 1, 0, 0, {{0}} },
+    { "Budget Deck",      ITEM_DECK, RARITY_COMMON,     250, 1, 0, 0, {{0}} },
+    { "Standard Deck",    ITEM_DECK, RARITY_UNCOMMON,   500, 2, 0, 0, {{0}} },
+    { "Street Deck",      ITEM_DECK, RARITY_UNCOMMON,   450, 2, 0, 0, {{0}} },
+    { "Ghost Rig",        ITEM_DECK, RARITY_UNCOMMON,   700, 2, 0, 1, {{ 1, 1, "+1 HCK" }} },
+    { "Assault Rig",      ITEM_DECK, RARITY_UNCOMMON,   750, 2, 0, 1, {{ 2, 1, "+1 CMB" }} },
+    { "Pro Deck",         ITEM_DECK, RARITY_RARE,       900, 3, 0, 0, {{0}} },
+    { "Phantom Deck",     ITEM_DECK, RARITY_RARE,      1100, 3, 0, 1, {{ 0, 1, "+1 STL" }} },
+    { "ICE Breaker",      ITEM_DECK, RARITY_RARE,      1200, 3, 0, 1, {{ 1, 1, "+1 HCK" }} },
+    { "Quantum Rig",      ITEM_DECK, RARITY_EPIC,      1600, 4, 0, 0, {{0}} },
+    { "Neural Interface", ITEM_DECK, RARITY_EPIC,      1800, 4, 0, 1, {{ 0, 2, "+2 STL" }} },
+    /* ---- CONSUMABLES (unlimited stock) ----------------------------- */
+    { "Stim Pack",        ITEM_CONSUMABLE, RARITY_COMMON,    60, 2, 0, 0, {{0}} },
+    { "Med Kit",          ITEM_CONSUMABLE, RARITY_COMMON,   150, 5, 0, 0, {{0}} },
+    { "Trauma Kit",       ITEM_CONSUMABLE, RARITY_UNCOMMON, 280, 8, 0, 0, {{0}} },
 };
 #define SHOP_GEAR_COUNT ((int)(sizeof(shop_gear) / sizeof(shop_gear[0])))
 static bool gear_sold[SHOP_GEAR_COUNT]; /* zeroed at startup; persists until restart */
@@ -513,11 +555,13 @@ static void screen_character(Entity *player)
 
 static void screen_shop(Entity *player)
 {
-    /* Combined list: indices 0..SHOP_COUNT-1 → consumables,
+    /* Combined list: indices 0..SHOP_COUNT-1 → augmentations,
      *                SHOP_COUNT..SHOP_COUNT+SHOP_GEAR_COUNT-1 → gear */
     int total = SHOP_COUNT + SHOP_GEAR_COUNT;
-    int sel = 0;
-    /* Start on first unsold item */
+    int sel   = 0;
+    int gear_scroll = 0;  /* first visible unsold gear item */
+
+    /* Start on first available item */
     for (int i = 0; i < total; i++) {
         bool sold = (i < SHOP_COUNT) ? shop_items[i].sold : gear_sold[i - SHOP_COUNT];
         if (!sold) { sel = i; break; }
@@ -525,6 +569,13 @@ static void screen_shop(Entity *player)
 
     WINDOW *win = make_panel("BLACK MARKET");
     bool dirty = true;
+
+    /* Fixed layout rows */
+#define AUG_HDR_ROW  4
+#define AUG_TOP_ROW  5
+#define AUG_MAX_ROWS 5   /* max augmentation rows before gear section */
+#define GEAR_HDR_ROW 11  /* gear section header (minimum) */
+#define GEAR_BOT_ROW (HUB_H - 4)   /* last row usable for gear items */
 
     while (1) {
         if (dirty) {
@@ -535,12 +586,12 @@ static void screen_shop(Entity *player)
             mvwprintw(win, 2, 3, "Credits: %d¢", player->credits);
             wattroff(win, COLOR_PAIR(COL_MENU_TITLE) | A_BOLD);
 
-            /* --- Consumables section --- */
+            /* ---- Augmentations section (fixed, no scroll) ---------- */
             wattron(win, COLOR_PAIR(COL_MENU_DIM));
-            mvwprintw(win, 4, 3, "-- AUGMENTATIONS --");
+            mvwprintw(win, AUG_HDR_ROW, 3, "-- AUGMENTATIONS --");
             wattroff(win, COLOR_PAIR(COL_MENU_DIM));
 
-            int row = 5;
+            int row = AUG_TOP_ROW;
             for (int i = 0; i < SHOP_COUNT; i++) {
                 ShopItem *it = &shop_items[i];
                 if (it->sold) continue;
@@ -558,40 +609,83 @@ static void screen_shop(Entity *player)
                 row++;
             }
 
-            /* --- Gear section --- */
-            row = (row < 11) ? 11 : row + 1;
+            /* ---- Gear section (scrollable) ------------------------- */
+            /* Build ordered list of unsold gear indices */
+            int gear_uns[SHOP_GEAR_COUNT];
+            int gear_n = 0;
+            for (int i = 0; i < SHOP_GEAR_COUNT; i++) {
+                if (!gear_sold[i])
+                    gear_uns[gear_n++] = i;
+            }
+
+            /* Find sel's position in gear_uns (if sel is in gear range) */
+            int sel_gear_pos = -1;
+            if (sel >= SHOP_COUNT) {
+                for (int g = 0; g < gear_n; g++) {
+                    if (SHOP_COUNT + gear_uns[g] == sel) {
+                        sel_gear_pos = g;
+                        break;
+                    }
+                }
+            }
+
+            /* Adjust gear_scroll to keep the selected gear item in view */
+            int gear_hdr = (row < GEAR_HDR_ROW - 1) ? GEAR_HDR_ROW - 1 : row + 1;
+            int gear_top = gear_hdr + 1;
+            int gear_vis = GEAR_BOT_ROW - gear_top;  /* visible rows */
+            if (gear_vis < 1) gear_vis = 1;
+            if (sel_gear_pos >= 0) {
+                if (sel_gear_pos < gear_scroll)
+                    gear_scroll = sel_gear_pos;
+                if (sel_gear_pos >= gear_scroll + gear_vis)
+                    gear_scroll = sel_gear_pos - gear_vis + 1;
+            }
+            if (gear_scroll < 0) gear_scroll = 0;
+
+            /* Section header with count and scroll hints */
             wattron(win, COLOR_PAIR(COL_MENU_DIM));
-            mvwprintw(win, row - 1, 3, "-- GEAR --");
+            mvwprintw(win, gear_hdr, 3, "-- GEAR (%d avail) --", gear_n);
+            if (gear_scroll > 0)
+                mvwprintw(win, gear_hdr, HUB_W - 7, " [/\\]");
+            if (gear_scroll + gear_vis < gear_n)
+                mvwprintw(win, GEAR_BOT_ROW, HUB_W - 7, " [\\/]");
             wattroff(win, COLOR_PAIR(COL_MENU_DIM));
 
-            for (int i = 0; i < SHOP_GEAR_COUNT; i++) {
-                if (row >= HUB_H - 3) break;
-                if (gear_sold[i]) continue;
-                Item *it = &shop_gear[i];
-                int idx = SHOP_COUNT + i;
-                bool affordable = player->credits >= it->value;
-                bool is_sel = (idx == sel);
+            /* Draw visible gear items */
+            row = gear_top;
+            for (int g = gear_scroll; g < gear_n && row < GEAR_BOT_ROW; g++) {
+                int   i   = gear_uns[g];
+                int   idx = SHOP_COUNT + i;
+                Item *it  = &shop_gear[i];
+                bool  affordable = player->credits >= it->value;
+                bool  is_sel     = (idx == sel);
 
-                attr_t base_attr = is_sel ? (COLOR_PAIR(COL_MENU_SEL) | A_BOLD)
-                                 : (!affordable ? COLOR_PAIR(COL_MENU_DIM)
-                                               : (COLOR_PAIR(COL_MENU_DIM) | A_BOLD));
-                wattron(win, base_attr);
+                attr_t base = is_sel ? (COLOR_PAIR(COL_MENU_SEL) | A_BOLD)
+                            : (!affordable ? COLOR_PAIR(COL_MENU_DIM)
+                                           : (COLOR_PAIR(COL_MENU_DIM) | A_BOLD));
+                wattron(win, base);
                 mvwprintw(win, row, 3, "%s[%s] %-16s",
                           is_sel ? ">" : " ",
                           item_type_label(it->type),
                           it->name);
-                wattroff(win, base_attr);
+                wattroff(win, base);
 
-                /* Rarity name in rarity colour */
+                /* Rarity in its colour */
                 int rcol = item_rarity_color(it->rarity);
-                wattron(win, COLOR_PAIR(rcol));
+                wattron(win, COLOR_PAIR(rcol) | (is_sel ? A_BOLD : 0));
                 mvwprintw(win, row, 30, "%-8s", item_rarity_name(it->rarity));
-                wattroff(win, COLOR_PAIR(rcol));
+                wattroff(win, COLOR_PAIR(rcol) | (is_sel ? A_BOLD : 0));
 
-                wattron(win, base_attr);
-                mvwprintw(win, row, 39, "%+d%-3s %4d¢",
-                          it->stat_bonus, stat_label(it->type), it->value);
-                wattroff(win, base_attr);
+                /* Stat + range (for ranged weapons) + price */
+                wattron(win, base);
+                if (it->type == ITEM_WEAPON && it->range > 0)
+                    mvwprintw(win, row, 39, "%+d%-3s rng%-2d %4d¢",
+                              it->stat_bonus, stat_label(it->type),
+                              it->range, it->value);
+                else
+                    mvwprintw(win, row, 39, "%+d%-3s        %4d¢",
+                              it->stat_bonus, stat_label(it->type), it->value);
+                wattroff(win, base);
 
                 row++;
             }
@@ -607,6 +701,7 @@ static void screen_shop(Entity *player)
 
         int ch = wgetch(win);
         switch (ch) {
+
         case KEY_UP: case 'k': {
             int orig = sel;
             do {
@@ -618,6 +713,7 @@ static void screen_shop(Entity *player)
             dirty = true;
             break;
         }
+
         case KEY_DOWN: case 'j': {
             int orig = sel;
             do {
@@ -629,14 +725,16 @@ static void screen_shop(Entity *player)
             dirty = true;
             break;
         }
+
         case '\n': case KEY_ENTER: {
             if (sel < SHOP_COUNT) {
+                /* Buy augmentation */
                 ShopItem *it = &shop_items[sel];
                 if (!it->sold && player->credits >= it->cost) {
                     player->credits -= it->cost;
                     player->skills[it->skill] += it->bonus;
                     it->sold = true;
-                    /* advance sel to next available */
+                    /* Advance sel to next available */
                     for (int i = 0; i < total; i++) {
                         int s = (sel + 1 + i) % total;
                         bool sold = (s < SHOP_COUNT) ? shop_items[s].sold
@@ -646,14 +744,16 @@ static void screen_shop(Entity *player)
                     dirty = true;
                 }
             } else {
+                /* Buy gear */
                 int gi = sel - SHOP_COUNT;
                 Item *it = &shop_gear[gi];
                 if (!gear_sold[gi] && player->credits >= it->value) {
                     if (entity_inv_add(player, *it)) {
                         player->credits -= it->value;
-                        /* Consumables are unlimited stock; equipment sells out */
+                        /* Consumables have unlimited stock; equipment sells out */
                         if (it->type != ITEM_CONSUMABLE)
                             gear_sold[gi] = true;
+                        /* Advance sel to next available */
                         for (int i = 0; i < total; i++) {
                             int s = (sel + 1 + i) % total;
                             bool sold = (s < SHOP_COUNT) ? shop_items[s].sold
@@ -666,11 +766,17 @@ static void screen_shop(Entity *player)
             }
             break;
         }
+
         case 'q': case 27:
             delwin(win);
             return;
         }
     }
+#undef AUG_HDR_ROW
+#undef AUG_TOP_ROW
+#undef AUG_MAX_ROWS
+#undef GEAR_HDR_ROW
+#undef GEAR_BOT_ROW
 }
 
 /* ------------------------------------------------------------------ */
