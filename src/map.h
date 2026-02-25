@@ -2,12 +2,12 @@
 
 #include <stdbool.h>
 
-#define MAP_WIDTH  80
-#define MAP_HEIGHT 40
+#define MAP_WIDTH  160
+#define MAP_HEIGHT  80
 
-#define MAX_ROOMS     15
+#define MAX_ROOMS     28
 #define ROOM_MIN_SIZE  4
-#define ROOM_MAX_SIZE 10
+#define ROOM_MAX_SIZE 12
 
 typedef enum {
     TILE_WALL,

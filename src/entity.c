@@ -21,6 +21,8 @@ void entity_init(Entity *e)
     e->credits      = 500;
     e->level        = 1;
     e->skill_points = 3;
+    e->xp           = 0;
+    e->xp_next      = 100;
     for (int i = 0; i < SKILL_COUNT; i++)
         e->skills[i] = 1;
 
@@ -136,6 +138,19 @@ int entity_gear_hack(const Entity *e)
 {
     const Item *d = &e->equipped[EQUIP_DECK];
     return item_valid(d) ? d->stat_bonus : 0;
+}
+
+int entity_gear_mod_bonus(const Entity *e, int skill)
+{
+    int total = 0;
+    for (int s = 0; s < EQUIP_SLOT_COUNT; s++) {
+        const Item *it = &e->equipped[s];
+        if (!item_valid(it)) continue;
+        for (int m = 0; m < it->mod_count; m++)
+            if (it->mods[m].skill == skill)
+                total += it->mods[m].bonus;
+    }
+    return total;
 }
 
 void entity_recalc_stats(Entity *e)

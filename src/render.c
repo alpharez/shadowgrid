@@ -84,48 +84,62 @@ void render_init(void)
     }
 }
 
-void render_map(const Map *map)
+/* Map viewport height: terminal rows minus 2 (status row + message row). */
+#define VIEW_H (LINES - 2)
+
+/* Convert world coords to screen coords.  Returns false if outside viewport. */
+static bool w2s(int wx, int wy, int cam_x, int cam_y, int *sx, int *sy)
+{
+    *sx = wx - cam_x;
+    *sy = wy - cam_y;
+    return (*sx >= 0 && *sx < COLS && *sy >= 0 && *sy < VIEW_H);
+}
+
+void render_map(const Map *map, int cam_x, int cam_y)
 {
     for (int y = 0; y < MAP_HEIGHT; y++) {
         for (int x = 0; x < MAP_WIDTH; x++) {
+            int sx, sy;
+            if (!w2s(x, y, cam_x, cam_y, &sx, &sy)) continue;
+
             const Tile *t = &map->tiles[y][x];
 
             if (t->visible) {
                 switch (t->type) {
                 case TILE_FLOOR:
                     attron(COLOR_PAIR(COL_FLOOR_VIS));
-                    mvaddch(y, x, '.');
+                    mvaddch(sy, sx, '.');
                     attroff(COLOR_PAIR(COL_FLOOR_VIS));
                     break;
                 case TILE_STAIRS:
                     attron(COLOR_PAIR(COL_STAIRS) | A_BOLD);
-                    mvaddch(y, x, '>');
+                    mvaddch(sy, sx, '>');
                     attroff(COLOR_PAIR(COL_STAIRS) | A_BOLD);
                     break;
                 case TILE_VENT:
                     attron(COLOR_PAIR(COL_VENT) | A_BOLD);
-                    mvaddch(y, x, '=');
+                    mvaddch(sy, sx, '=');
                     attroff(COLOR_PAIR(COL_VENT) | A_BOLD);
                     break;
                 case TILE_TERMINAL:
                     attron(COLOR_PAIR(COL_TERMINAL) | A_BOLD);
-                    mvaddch(y, x, '[');
+                    mvaddch(sy, sx, '[');
                     attroff(COLOR_PAIR(COL_TERMINAL) | A_BOLD);
                     break;
                 case TILE_DOOR:
                     attron(COLOR_PAIR(COL_DOOR) | A_BOLD);
-                    mvaddch(y, x, '+');
+                    mvaddch(sy, sx, '+');
                     attroff(COLOR_PAIR(COL_DOOR) | A_BOLD);
                     break;
                 case TILE_STAIRS_LOCKED:
                     /* Invisible until unlocked — renders as plain floor */
                     attron(COLOR_PAIR(COL_FLOOR_VIS));
-                    mvaddch(y, x, '.');
+                    mvaddch(sy, sx, '.');
                     attroff(COLOR_PAIR(COL_FLOOR_VIS));
                     break;
                 default: /* TILE_WALL */
                     attron(COLOR_PAIR(COL_WALL_VIS) | A_BOLD);
-                    mvaddch(y, x, '#');
+                    mvaddch(sy, sx, '#');
                     attroff(COLOR_PAIR(COL_WALL_VIS) | A_BOLD);
                     break;
                 }
@@ -133,59 +147,64 @@ void render_map(const Map *map)
                 switch (t->type) {
                 case TILE_FLOOR:
                     attron(COLOR_PAIR(COL_FLOOR_MEM));
-                    mvaddch(y, x, '.');
+                    mvaddch(sy, sx, '.');
                     attroff(COLOR_PAIR(COL_FLOOR_MEM));
                     break;
                 case TILE_STAIRS:
                     attron(COLOR_PAIR(COL_FLOOR_MEM));
-                    mvaddch(y, x, '>');
+                    mvaddch(sy, sx, '>');
                     attroff(COLOR_PAIR(COL_FLOOR_MEM));
                     break;
                 case TILE_VENT:
                     attron(COLOR_PAIR(COL_FLOOR_MEM));
-                    mvaddch(y, x, '=');
+                    mvaddch(sy, sx, '=');
                     attroff(COLOR_PAIR(COL_FLOOR_MEM));
                     break;
                 case TILE_TERMINAL:
                     attron(COLOR_PAIR(COL_FLOOR_MEM));
-                    mvaddch(y, x, '[');
+                    mvaddch(sy, sx, '[');
                     attroff(COLOR_PAIR(COL_FLOOR_MEM));
                     break;
                 case TILE_DOOR:
                     attron(COLOR_PAIR(COL_FLOOR_MEM));
-                    mvaddch(y, x, '+');
+                    mvaddch(sy, sx, '+');
                     attroff(COLOR_PAIR(COL_FLOOR_MEM));
                     break;
                 case TILE_STAIRS_LOCKED:
                     attron(COLOR_PAIR(COL_FLOOR_MEM));
-                    mvaddch(y, x, '.');
+                    mvaddch(sy, sx, '.');
                     attroff(COLOR_PAIR(COL_FLOOR_MEM));
                     break;
                 default: /* TILE_WALL */
                     attron(COLOR_PAIR(COL_WALL_MEM) | A_BOLD);
-                    mvaddch(y, x, '#');
+                    mvaddch(sy, sx, '#');
                     attroff(COLOR_PAIR(COL_WALL_MEM) | A_BOLD);
                     break;
                 }
-            } else {
-                mvaddch(y, x, ' ');
             }
+            /* Unknown tiles: erase() already cleared them; nothing to draw. */
         }
     }
 }
 
-void render_entity(const Entity *e)
+void render_entity(const Entity *e, int cam_x, int cam_y)
 {
+    int sx, sy;
+    if (!w2s(e->x, e->y, cam_x, cam_y, &sx, &sy)) return;
     attron(COLOR_PAIR(COL_PLAYER) | A_BOLD);
-    mvaddch(e->y, e->x, e->symbol);
+    mvaddch(sy, sx, e->symbol);
     attroff(COLOR_PAIR(COL_PLAYER) | A_BOLD);
 }
 
-void render_guards(const GuardList *gl, const Map *map, bool scan_active)
+void render_guards(const GuardList *gl, const Map *map, bool scan_active,
+                   int cam_x, int cam_y)
 {
     for (int i = 0; i < gl->count; i++) {
         const Guard *g = &gl->guards[i];
         if (!map->tiles[g->y][g->x].visible && !scan_active) continue;
+
+        int sx, sy;
+        if (!w2s(g->x, g->y, cam_x, cam_y, &sx, &sy)) continue;
 
         int    col;
         attr_t attr = A_BOLD;
@@ -210,16 +229,20 @@ void render_guards(const GuardList *gl, const Map *map, bool scan_active)
         }
 
         attron(COLOR_PAIR(col) | attr);
-        mvaddch(g->y, g->x, sym);
+        mvaddch(sy, sx, sym);
         attroff(COLOR_PAIR(col) | attr);
     }
 }
 
-void render_drones(const DroneList *dl, const Map *map, bool scan_active)
+void render_drones(const DroneList *dl, const Map *map, bool scan_active,
+                   int cam_x, int cam_y)
 {
     for (int i = 0; i < dl->count; i++) {
         const Drone *d = &dl->drones[i];
         if (!map->tiles[d->y][d->x].visible && !scan_active) continue;
+
+        int sx, sy;
+        if (!w2s(d->x, d->y, cam_x, cam_y, &sx, &sy)) continue;
 
         int    col;
         attr_t attr = A_BOLD;
@@ -237,18 +260,20 @@ void render_drones(const DroneList *dl, const Map *map, bool scan_active)
         }
 
         attron(COLOR_PAIR(col) | attr);
-        mvaddch(d->y, d->x, 'd');
+        mvaddch(sy, sx, 'd');
         attroff(COLOR_PAIR(col) | attr);
     }
 }
 
-void render_projectiles(const ProjectileList *pl)
+void render_projectiles(const ProjectileList *pl, int cam_x, int cam_y)
 {
     for (int i = 0; i < pl->count; i++) {
         const Projectile *p = &pl->p[i];
         if (!p->active) continue;
+        int sx, sy;
+        if (!w2s(p->x, p->y, cam_x, cam_y, &sx, &sy)) continue;
         attron(COLOR_PAIR(COL_PROJECTILE) | A_BOLD);
-        mvaddch(p->y, p->x, p->symbol);
+        mvaddch(sy, sx, p->symbol);
         attroff(COLOR_PAIR(COL_PROJECTILE) | A_BOLD);
     }
 }
@@ -263,12 +288,15 @@ void render_status(const Entity *e, const GuardList *gl,
                    const ChromeState *cr,
                    const char *msg)
 {
-    move(MAP_HEIGHT, 0);
+    int status_row = LINES - 2;
+    int msg_row    = LINES - 1;
+
+    move(status_row, 0);
     clrtoeol();
 
     attron(COLOR_PAIR(COL_STATUS) | A_BOLD);
-    mvprintw(MAP_HEIGHT, 0, "HP:%d/%d  ¢%d  LVL:%d",
-             e->hp, e->max_hp, e->credits, e->level);
+    mvprintw(status_row, 0, "HP:%d/%d  \xc2\xa2%d  LVL:%d  XP:%d/%d",
+             e->hp, e->max_hp, e->credits, e->level, e->xp, e->xp_next);
     attroff(COLOR_PAIR(COL_STATUS) | A_BOLD);
 
     /* Mission objective indicators */
@@ -419,13 +447,13 @@ void render_status(const Entity *e, const GuardList *gl,
     attroff(COLOR_PAIR(COL_STATUS) | A_BOLD);
 
     /* One-turn feedback message on the line below the status bar */
-    move(MAP_HEIGHT + 1, 0);
+    move(msg_row, 0);
     clrtoeol();
     if (msg && msg[0] != '\0') {
         bool success = (msg[0] == 'H' && msg[5] == 'S');  /* "HACK S..." */
         int col = success ? COL_STAIRS : COL_GUARD_ALERT;
         attron(COLOR_PAIR(col) | A_BOLD);
-        mvprintw(MAP_HEIGHT + 1, 0, "%s", msg);
+        mvprintw(msg_row, 0, "%s", msg);
         attroff(COLOR_PAIR(col) | A_BOLD);
     }
 }

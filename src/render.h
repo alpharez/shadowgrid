@@ -51,14 +51,17 @@
 #define COL_DRONE_HACKED     26  /* hacked drone (green, friendly) */
 
 void render_init(void);
-void render_map(const Map *map);
-void render_entity(const Entity *e);
+/* cam_x/cam_y: top-left world tile of the viewport (computed by game loop). */
+void render_map(const Map *map, int cam_x, int cam_y);
+void render_entity(const Entity *e, int cam_x, int cam_y);
 /* scan_active: show all guards/drones through walls (network scan effect) */
-void render_guards(const GuardList *gl, const Map *map, bool scan_active);
+void render_guards(const GuardList *gl, const Map *map, bool scan_active,
+                   int cam_x, int cam_y);
 /* Draw drones; scan_active reveals them through walls like guards. */
-void render_drones(const DroneList *dl, const Map *map, bool scan_active);
+void render_drones(const DroneList *dl, const Map *map, bool scan_active,
+                   int cam_x, int cam_y);
 /* Draw all active projectiles over the current frame. */
-void render_projectiles(const ProjectileList *pl);
+void render_projectiles(const ProjectileList *pl, int cam_x, int cam_y);
 /* bt_avail: Bullet Time ready to use; bt_active: extra action in progress.
  * gp_timer: turns remaining on Ghost Protocol (0 = inactive).
  * door_locked / stairs_locked: mission objective state for status display.

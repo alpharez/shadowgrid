@@ -26,6 +26,43 @@ static bool near_wall(const Map *map, int x, int y)
     return false;
 }
 
+/* Compute camera top-left so the player is centred in the viewport. */
+static void compute_camera(int px, int py, int *cam_x, int *cam_y)
+{
+    int view_w = COLS;
+    int view_h = LINES - 2;   /* two bottom rows: status + message */
+    *cam_x = px - view_w / 2;
+    *cam_y = py - view_h / 2;
+    if (*cam_x < 0) *cam_x = 0;
+    if (*cam_y < 0) *cam_y = 0;
+    if (*cam_x + view_w > MAP_WIDTH)  *cam_x = MAP_WIDTH  - view_w;
+    if (*cam_y + view_h > MAP_HEIGHT) *cam_y = MAP_HEIGHT - view_h;
+    if (*cam_x < 0) *cam_x = 0;   /* map smaller than viewport */
+    if (*cam_y < 0) *cam_y = 0;
+}
+
+/* Return the elite flag of the guard at (x,y), false if none. */
+static bool guard_elite_at(const GuardList *gl, int x, int y)
+{
+    for (int i = 0; i < gl->count; i++)
+        if (gl->guards[i].x == x && gl->guards[i].y == y)
+            return gl->guards[i].elite;
+    return false;
+}
+
+/* Award XP; level up immediately (with skill-tree overlay) if threshold crossed. */
+static void xp_gain(Entity *player, int amount)
+{
+    player->xp += amount;
+    while (player->xp >= player->xp_next) {
+        player->xp      -= player->xp_next;
+        player->level++;
+        player->xp_next  = player->level * 100;
+        player->skill_points += 2;
+        hub_levelup_menu(player);
+    }
+}
+
 static void ncurses_init(void)
 {
     initscr();
@@ -154,7 +191,8 @@ static bool handle_input(int ch, Entity *player, Map *map,
         }
         if (tidx < 0) return false;
 
-        int hack_power = player->skills[SKILL_HACKING] + entity_gear_hack(player);
+        int hack_power = player->skills[SKILL_HACKING] + entity_gear_hack(player)
+                       + entity_gear_mod_bonus(player, SKILL_HACKING);
         if (nr->scavenger)     hack_power += 1;  /* Scavenger: +1 passive bonus */
         if (nr->overclock_armed) {               /* Overclock: +2, consume arm  */
             hack_power += 2;
@@ -176,11 +214,12 @@ static bool handle_input(int ch, Entity *player, Map *map,
                 map->tiles[map->stairs_y][map->stairs_x].type = TILE_STAIRS;
             map->tiles[hack_ty][hack_tx].type = TILE_FLOOR;
             if (nr->backdoor_king)
-                snprintf(msg, 80, "HACK SUCCESS -- door opened + stairway live (Backdoor King)");
+                snprintf(msg, 80, "HACK SUCCESS -- door opened + stairway live (Backdoor King)  +15 XP");
             else if (map->terminal_effects[tidx] == HACK_OPEN_DOOR)
-                snprintf(msg, 80, "HACK SUCCESS -- security door opened");
+                snprintf(msg, 80, "HACK SUCCESS -- security door opened  +15 XP");
             else
-                snprintf(msg, 80, "HACK SUCCESS -- stairway unlocked");
+                snprintf(msg, 80, "HACK SUCCESS -- stairway unlocked  +15 XP");
+            xp_gain(player, 15);
             return !has_quick_hack;
         } else {
             if (!has_ghost_signal) {
@@ -360,7 +399,8 @@ static bool handle_input(int ch, Entity *player, Map *map,
         if (cr->last_dx == 0 && cr->last_dy == 0) return false;
         {
             int rdx  = cr->last_dx, rdy = cr->last_dy;
-            int atk  = entity_gear_atk(player) + player->skills[SKILL_COMBAT];
+            int atk  = entity_gear_atk(player) + player->skills[SKILL_COMBAT]
+                     + entity_gear_mod_bonus(player, SKILL_COMBAT);
             int hits = 0;
 
             for (int step = 0; step < 3; step++) {
@@ -370,6 +410,7 @@ static bool handle_input(int ch, Entity *player, Map *map,
 
                 if (guard_at(guards, nx, ny)) {
                     /* Strike the guard */
+                    bool rush_elite = guard_elite_at(guards, nx, ny);
                     int before = guards->count;
                     Item drop = {0};
                     guard_player_attack(guards, nx, ny, atk,
@@ -379,6 +420,8 @@ static bool handle_input(int ch, Entity *player, Map *map,
                     hits++;
 
                     bool guard_dead = (guards->count < before);
+                    if (guard_dead)
+                        xp_gain(player, rush_elite ? 50 : 25);
                     bool advanced   = false;
 
                     if (guard_dead) {
@@ -458,7 +501,8 @@ static bool handle_input(int ch, Entity *player, Map *map,
         }
         if (tgt_x < 0) return false;  /* no visible target in range */
 
-        int dmg = entity_gear_atk(player) + player->skills[SKILL_COMBAT];
+        int dmg = entity_gear_atk(player) + player->skills[SKILL_COMBAT]
+                + entity_gear_mod_bonus(player, SKILL_COMBAT);
 
         /* Iron Grip: CHROME (2), tier 0, opt 2 — steady aim gives +1 ATK */
         if (player->tree_bought[2][0] & (1 << 2))
@@ -480,18 +524,23 @@ static bool handle_input(int ch, Entity *player, Map *map,
 
         Item drops[MAX_GUARDS];
         int  ndrop = 0;
+        int  guards_before_fl = guards->count;
 
+        int cam_x, cam_y;
+        compute_camera(player->x, player->y, &cam_x, &cam_y);
         while (proj_step(&pl, map, guards, drones, player->x, player->y,
                          drops, &ndrop, NULL)) {
             erase();
-            render_map(map);
-            render_guards(guards, map, false);
-            render_drones(drones, map, false);
-            render_entity(player);
-            render_projectiles(&pl);
+            render_map(map, cam_x, cam_y);
+            render_guards(guards, map, false, cam_x, cam_y);
+            render_drones(drones, map, false, cam_x, cam_y);
+            render_entity(player, cam_x, cam_y);
+            render_projectiles(&pl, cam_x, cam_y);
             refresh();
             napms(55);
         }
+        /* XP for flechette kills */
+        xp_gain(player, (guards_before_fl - guards->count) * 25);
 
         /* Collect loot from killed guards */
         for (int i = 0; i < ndrop; i++)
@@ -532,7 +581,9 @@ static bool handle_input(int ch, Entity *player, Map *map,
         bool silent_td = (player->tree_bought[0][2] & (1 << 0)) != 0 &&
                          guard_state_at(guards, nx, ny) == GUARD_UNAWARE;
         int dmg = silent_td ? GUARD_MAX_HP
-                            : entity_gear_atk(player) + player->skills[SKILL_COMBAT];
+                            : entity_gear_atk(player) + player->skills[SKILL_COMBAT]
+                              + entity_gear_mod_bonus(player, SKILL_COMBAT);
+        bool was_elite   = guard_elite_at(guards, nx, ny);
         Item drop = {0};
         int count_before = guards->count;
         guard_player_attack(guards, nx, ny, dmg, player->x, player->y, &drop);
@@ -542,13 +593,16 @@ static bool handle_input(int ch, Entity *player, Map *map,
         if (guards->count == count_before &&
                 (player->tree_bought[2][1] & (1 << 1)))
             guard_disarm(guards, nx, ny, 3);
+        bool guard_killed = guards->count < count_before;
         /* Adrenaline: CHROME tree (2), tier 1, option 2 — kills restore 2 HP */
-        if (guards->count < count_before &&
-                (player->tree_bought[2][1] & (1 << 2))) {
+        if (guard_killed && (player->tree_bought[2][1] & (1 << 2))) {
             player->hp += 2;
             if (player->hp > player->max_hp)
                 player->hp = player->max_hp;
         }
+        /* XP for guard kill */
+        if (guard_killed)
+            xp_gain(player, was_elite ? 50 : 25);
         /* Quick Draw: CHROME tree (2), tier 0, option 0 — first attack free */
         if ((player->tree_bought[2][0] & (1 << 0)) && *quick_draw_avail) {
             *quick_draw_avail = false;
@@ -556,17 +610,21 @@ static bool handle_input(int ch, Entity *player, Map *map,
         }
     } else if (drone_at(drones, nx, ny)) {
         /* Melee a drone: close the gap and smash it */
-        int dmg = entity_gear_atk(player) + player->skills[SKILL_COMBAT];
+        int dmg = entity_gear_atk(player) + player->skills[SKILL_COMBAT]
+                + entity_gear_mod_bonus(player, SKILL_COMBAT);
         Item drop = {0};
         int drones_before = drones->count;
         drone_player_attack(drones, nx, ny, dmg, &drop);
+        bool drone_killed = drones->count < drones_before;
         /* Adrenaline: kill restores 2 HP */
-        if (drones->count < drones_before &&
-                (player->tree_bought[2][1] & (1 << 2))) {
+        if (drone_killed && (player->tree_bought[2][1] & (1 << 2))) {
             player->hp += 2;
             if (player->hp > player->max_hp)
                 player->hp = player->max_hp;
         }
+        /* XP for drone kill */
+        if (drone_killed)
+            xp_gain(player, 20);
         /* Quick Draw: first attack free */
         if ((player->tree_bought[2][0] & (1 << 0)) && *quick_draw_avail) {
             *quick_draw_avail = false;
@@ -708,11 +766,13 @@ static GameState game_run(Map *map, Entity *player)
         bool next_floor = false;
 
         while (!done && !next_floor) {
+            int cam_x, cam_y;
+            compute_camera(player->x, player->y, &cam_x, &cam_y);
             erase();
-            render_map(map);
-            render_guards(&guards, map, nr.drone_buddy);
-            render_drones(&drones, map, nr.drone_buddy);
-            render_entity(player);
+            render_map(map, cam_x, cam_y);
+            render_guards(&guards, map, nr.drone_buddy, cam_x, cam_y);
+            render_drones(&drones, map, nr.drone_buddy, cam_x, cam_y);
+            render_entity(player, cam_x, cam_y);
 
             /* Predict Patrol: SHADOW (0), tier 2, opt 1 — overlay guard patrol
              * waypoints on the map as dim '+' markers on explored tiles. */
@@ -721,9 +781,11 @@ static GameState game_run(Map *map, Entity *player)
                     const Guard *g = &guards.guards[i];
                     for (int wp = 0; wp < 2; wp++) {
                         int wx = g->patrol[wp][0], wy = g->patrol[wp][1];
+                        int sx = wx - cam_x, sy = wy - cam_y;
+                        if (sx < 0 || sx >= COLS || sy < 0 || sy >= LINES - 2) continue;
                         if (map->tiles[wy][wx].visible || map->tiles[wy][wx].seen) {
                             attron(COLOR_PAIR(COL_MENU_DIM));
-                            mvaddch(wy, wx, '+');
+                            mvaddch(sy, sx, '+');
                             attroff(COLOR_PAIR(COL_MENU_DIM));
                         }
                     }
@@ -732,9 +794,12 @@ static GameState game_run(Map *map, Entity *player)
 
             /* Trap Master: show placed traps as yellow ^ if visible */
             for (int t = 0; t < nr.trap_count; t++) {
-                if (map->tiles[nr.trap_y[t]][nr.trap_x[t]].visible) {
+                int tx = nr.trap_x[t], ty = nr.trap_y[t];
+                int sx = tx - cam_x, sy = ty - cam_y;
+                if (sx < 0 || sx >= COLS || sy < 0 || sy >= LINES - 2) continue;
+                if (map->tiles[ty][tx].visible) {
                     attron(COLOR_PAIR(COL_GUARD_SUSPICIOUS) | A_BOLD);
-                    mvaddch(nr.trap_y[t], nr.trap_x[t], '^');
+                    mvaddch(sy, sx, '^');
                     attroff(COLOR_PAIR(COL_GUARD_SUSPICIOUS) | A_BOLD);
                 }
             }
@@ -784,7 +849,8 @@ static GameState game_run(Map *map, Entity *player)
                         gp_timer--;
                     } else {
                         det = guard_detection_range(player->crouched,
-                                                    player->skills[SKILL_STEALTH]);
+                                                    player->skills[SKILL_STEALTH]
+                                                    + entity_gear_mod_bonus(player, SKILL_STEALTH));
                         /* Shadow Meld: SHADOW (0), tier 1, opt 0 — standing still = 0 det */
                         if (shadow_meld && !player_moved)
                             det = 0;
@@ -819,22 +885,30 @@ static GameState game_run(Map *map, Entity *player)
                                              player->x, player->y,
                                              drone_drops, &drone_ndrop, &drone_pdmg)) {
                                 erase();
-                                render_map(map);
-                                render_guards(&guards, map, nr.drone_buddy);
-                                render_drones(&drones, map, nr.drone_buddy);
-                                render_entity(player);
-                                render_projectiles(&drone_pl);
+                                render_map(map, cam_x, cam_y);
+                                render_guards(&guards, map, nr.drone_buddy, cam_x, cam_y);
+                                render_drones(&drones, map, nr.drone_buddy, cam_x, cam_y);
+                                render_entity(player, cam_x, cam_y);
+                                render_projectiles(&drone_pl, cam_x, cam_y);
                                 refresh();
                                 napms(55);
                             }
-                            player->hp -= drone_pdmg;
-                            if (drone_pdmg > 0 && game_msg[0] == '\0')
-                                snprintf(game_msg, 80, "DRONE HIT -- %d damage!", drone_pdmg);
+                            if (drone_pdmg > 0) {
+                                int net = drone_pdmg - entity_gear_def(player);
+                                player->hp -= net > 0 ? net : 1;
+                                if (game_msg[0] == '\0')
+                                    snprintf(game_msg, 80, "DRONE HIT -- %d damage!",
+                                             net > 0 ? net : 1);
+                            }
                             /* Loot from guards killed by hacked-drone shots */
                             for (int i = 0; i < drone_ndrop; i++)
                                 if (item_valid(&drone_drops[i]))
                                     entity_inv_add(player, drone_drops[i]);
                         }
+                    }
+                    if (dmg > 0) {
+                        int net = dmg - entity_gear_def(player);
+                        dmg = net > 0 ? net : 1;
                     }
                     player->hp -= dmg;
                     /* Second Wind: CHROME (2), tier 3, opt 2 — survive lethal hit once */
@@ -854,13 +928,18 @@ static GameState game_run(Map *map, Entity *player)
                             if (cdx < 0) cdx = -cdx;
                             if (cdy < 0) cdy = -cdy;
                             if ((cdx > cdy ? cdx : cdy) == 1) {
+                                bool cnt_elite = guard_elite_at(&guards, g->x, g->y);
                                 int cnt_dmg = entity_gear_atk(player) +
-                                              player->skills[SKILL_COMBAT];
+                                              player->skills[SKILL_COMBAT] +
+                                              entity_gear_mod_bonus(player, SKILL_COMBAT);
+                                int cnt_before = guards.count;
                                 Item cnt_drop = {0};
                                 guard_player_attack(&guards, g->x, g->y, cnt_dmg,
                                                     player->x, player->y, &cnt_drop);
                                 if (item_valid(&cnt_drop))
                                     entity_inv_add(player, cnt_drop);
+                                if (guards.count < cnt_before)
+                                    xp_gain(player, cnt_elite ? 50 : 25);
                                 snprintf(game_msg, 80, "COUNTERATTACK! (%d dmg)", cnt_dmg);
                                 break;
                             }
@@ -908,7 +987,8 @@ static GameState game_run(Map *map, Entity *player)
                     return GAME_STATE_DEBRIEF;
                 } else {
                     /* Intermediate floor: descend to next level */
-                    snprintf(game_msg, 80, "DESCENDING -- floor %d of %d",
+                    xp_gain(player, 30);
+                    snprintf(game_msg, 80, "DESCENDING -- floor %d of %d  +30 XP",
                              current_floor + 1, num_floors);
                     next_floor = true;
                 }

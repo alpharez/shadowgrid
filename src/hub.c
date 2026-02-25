@@ -502,7 +502,7 @@ static void do_respec(Entity *player)
     entity_recalc_stats(player);
 }
 
-static void screen_character(Entity *player)
+void hub_levelup_menu(Entity *player)
 {
     WINDOW *win = newwin(ST_ROWS, ST_COLS, 0, 0);
     keypad(win, TRUE);
@@ -1367,7 +1367,7 @@ GameState hub_run(Entity *player)
         case KEY_DOWN: case 'j': sel = (sel + 1) % nitems;         break;
         case '\n': case KEY_ENTER:
             switch (sel) {
-            case MAIN_CHARACTER:  screen_character(player);  break;
+            case MAIN_CHARACTER:  hub_levelup_menu(player);  break;
             case MAIN_EQUIPMENT:  screen_equipment(player);  break;
             case MAIN_INVENTORY:  screen_inventory(player, ITEM_NONE); break;
             case MAIN_SHOP:       screen_shop(player);       break;
@@ -1394,8 +1394,7 @@ GameState hub_run(Entity *player)
 GameState debrief_run(Entity *player)
 {
     player->credits += player->active_mission_reward;
-    player->level++;
-    player->skill_points += 2;
+    player->xp += 50;   /* mission completion XP bonus */
     player->active_mission_reward = 0;
 
     /* Collect loot into inventory */
@@ -1413,8 +1412,8 @@ GameState debrief_run(Entity *player)
 
     wattron(win, COLOR_PAIR(COL_MENU_DIM));
     mvwprintw(win, 7,  3, "Credits earned  : %d¢",   player->credits);
-    mvwprintw(win, 8,  3, "New level       : %d",    player->level);
-    mvwprintw(win, 9,  3, "Skill points    : +2 (total %d)", player->skill_points);
+    mvwprintw(win, 8,  3, "Level           : %d",    player->level);
+    mvwprintw(win, 9,  3, "Bonus XP        : +50  (total %d/%d)", player->xp, player->xp_next);
     wattroff(win, COLOR_PAIR(COL_MENU_DIM));
 
     /* Show loot items */

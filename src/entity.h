@@ -31,6 +31,10 @@ typedef struct {
     /* Movement / stance */
     bool crouched;
 
+    /* Experience and leveling */
+    int xp;       /* accumulated XP this level */
+    int xp_next;  /* XP threshold for next level */
+
     /* Set by mission selection, paid out on debrief */
     int active_mission_reward;
     int active_mission_difficulty; /* 1-5, stored directly to avoid reward math errors */
@@ -70,6 +74,7 @@ void entity_unequip(Entity *e, EquipSlot slot);   /* returns item to inventory i
 int entity_gear_atk(const Entity *e);   /* sum of weapon stat_bonus */
 int entity_gear_def(const Entity *e);   /* sum of armor stat_bonus */
 int entity_gear_hack(const Entity *e);  /* deck stat_bonus */
+int entity_gear_mod_bonus(const Entity *e, int skill); /* sum of mods[] bonuses for a skill */
 
 /* Use the first Med Kit in inventory; heals stat_bonus HP up to max_hp.
  * Does nothing if no consumable is present. */

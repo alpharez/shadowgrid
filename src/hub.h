@@ -24,6 +24,9 @@ GameState death_run(Entity *player);
 /* Reset shop sold-flags for a new game. */
 void hub_shop_reset(void);
 
+/* Open the skill tree overlay (full 3-tree picker) mid-mission or at hub. */
+void hub_levelup_menu(Entity *player);
+
 /* In-mission inventory overlay: browse backpack, equip items.
  * Draws over the current map frame; restores stdscr on close. */
 void mission_inventory(Entity *player);
