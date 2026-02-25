@@ -107,6 +107,13 @@ static Item shop_gear[] = {
 #define SHOP_GEAR_COUNT ((int)(sizeof(shop_gear) / sizeof(shop_gear[0])))
 static bool gear_sold[SHOP_GEAR_COUNT]; /* zeroed at startup; persists until restart */
 
+void hub_shop_reset(void)
+{
+    for (int i = 0; i < SHOP_COUNT; i++)
+        shop_items[i].sold = false;
+    memset(gear_sold, 0, sizeof(gear_sold));
+}
+
 /* ------------------------------------------------------------------ */
 /* Mission board                                                        */
 /* ------------------------------------------------------------------ */
@@ -1301,7 +1308,8 @@ static GameState screen_missions(Entity *player)
         case KEY_UP: case 'k': sel = (sel - 1 + MISSION_COUNT) % MISSION_COUNT; dirty = true; break;
         case KEY_DOWN: case 'j': sel = (sel + 1) % MISSION_COUNT;               dirty = true; break;
         case '\n': case KEY_ENTER:
-            player->active_mission_reward = missions[sel].reward;
+            player->active_mission_reward     = missions[sel].reward;
+            player->active_mission_difficulty = missions[sel].difficulty;
             delwin(win);
             return GAME_STATE_PLAYING;
         case 'q': case 27:
@@ -1491,6 +1499,7 @@ GameState death_run(Entity *player)
         case '\n': case KEY_ENTER:
             delwin(win);
             if (sel == 0) {
+                hub_shop_reset();
                 entity_init(player);
                 return GAME_STATE_HUB;
             }

@@ -21,6 +21,9 @@ GameState debrief_run(Entity *player);
 /* Run the death screen. Returns GAME_STATE_HUB (new game) or GAME_STATE_QUIT. */
 GameState death_run(Entity *player);
 
+/* Reset shop sold-flags for a new game. */
+void hub_shop_reset(void);
+
 /* In-mission inventory overlay: browse backpack, equip items.
  * Draws over the current map frame; restores stdscr on close. */
 void mission_inventory(Entity *player);

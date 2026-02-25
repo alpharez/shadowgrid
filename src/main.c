@@ -584,8 +584,9 @@ static GameState game_run(Map *map, Entity *player)
     static GuardList guards;
     static DroneList drones;
 
-    /* Difficulty 0-5 scale derived from mission reward tier */
-    int difficulty = player->active_mission_reward / 150;
+    /* Difficulty 1-5 stored directly from mission selection */
+    int difficulty = player->active_mission_difficulty;
+    if (difficulty < 1) difficulty = 1;
     if (difficulty > 5) difficulty = 5;
 
     /* Number of floors scales with difficulty: diff 0-1 → 1F, 2-3 → 2F, 4-5 → 3F */

@@ -33,6 +33,7 @@ typedef struct {
 
     /* Set by mission selection, paid out on debrief */
     int active_mission_reward;
+    int active_mission_difficulty; /* 1-5, stored directly to avoid reward math errors */
 
     /* Skill trees (SHADOW=0, NETRUNNER=1, CHROME=2) */
     int tree_points[TREE_COUNT];                 /* SP spent per tree (= skills bought) */

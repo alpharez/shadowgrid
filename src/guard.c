@@ -106,6 +106,32 @@ static bool move_toward(Guard *g, const Map *map, const GuardList *gl,
         g->y += dy; return true;
     }
 
+    /* Primary directions blocked — try all 8 directions and pick whichever
+     * one makes the most progress toward the target.  This prevents guards
+     * from freezing in corridors or when another guard is blocking the path. */
+    static const int dirs[8][2] = {
+        { 1, 0}, {-1, 0}, { 0, 1}, { 0,-1},
+        { 1, 1}, { 1,-1}, {-1, 1}, {-1,-1},
+    };
+    int best_dist = chebyshev(g->x, g->y, tx, ty);
+    int best_ndx = 0, best_ndy = 0;
+    for (int i = 0; i < 8; i++) {
+        int ndx = dirs[i][0], ndy = dirs[i][1];
+        int nx = g->x + ndx, ny = g->y + ndy;
+        if (!passable(nx, ny)) continue;
+        int d = chebyshev(nx, ny, tx, ty);
+        if (d < best_dist) {
+            best_dist = d;
+            best_ndx  = ndx;
+            best_ndy  = ndy;
+        }
+    }
+    if (best_ndx || best_ndy) {
+        g->x += best_ndx;
+        g->y += best_ndy;
+        return true;
+    }
+
 #undef passable
     return false;
 }
@@ -193,8 +219,13 @@ static int guard_tick_one(Guard *g, const Map *map, GuardList *gl,
                 g->suspicion = 0;
                 g->hunt_timer = 0;
             } else {
-                /* Move toward last known position; time out back to suspicious */
-                move_toward(g, map, gl, g->last_seen_x, g->last_seen_y, px, py);
+                /* Move toward last known position; time out back to suspicious.
+                 * If the guard has already reached the last known spot, count
+                 * down faster so it doesn't freeze there indefinitely. */
+                bool moved = move_toward(g, map, gl,
+                                         g->last_seen_x, g->last_seen_y, px, py);
+                if (!moved)
+                    g->hunt_timer -= 2;   /* arrived at last known pos — hurry timeout */
                 if (--g->hunt_timer <= 0) {
                     g->state     = GUARD_SUSPICIOUS;
                     g->suspicion = 1;
