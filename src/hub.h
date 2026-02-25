@@ -8,6 +8,7 @@ typedef enum {
     GAME_STATE_HUB,
     GAME_STATE_PLAYING,
     GAME_STATE_DEBRIEF,
+    GAME_STATE_DEAD,
     GAME_STATE_QUIT,
 } GameState;
 
@@ -16,6 +17,9 @@ GameState hub_run(Entity *player);
 
 /* Run the debrief screen. Awards mission reward and returns GAME_STATE_HUB. */
 GameState debrief_run(Entity *player);
+
+/* Run the death screen. Returns GAME_STATE_HUB (new game) or GAME_STATE_QUIT. */
+GameState death_run(Entity *player);
 
 /* In-mission inventory overlay: browse backpack, equip items.
  * Draws over the current map frame; restores stdscr on close. */

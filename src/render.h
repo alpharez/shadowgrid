@@ -3,6 +3,7 @@
 #include "map.h"
 #include "entity.h"
 #include "guard.h"
+#include "drone.h"
 #include "projectile.h"
 #include "netrunner.h"
 #include "chrome.h"
@@ -45,21 +46,30 @@
 /* Elite guard colour */
 #define COL_GUARD_ELITE      24  /* unaware elite guard (steel blue) */
 
+/* Drone colours */
+#define COL_DRONE            25  /* patrolling drone (violet) */
+#define COL_DRONE_HACKED     26  /* hacked drone (green, friendly) */
+
 void render_init(void);
 void render_map(const Map *map);
 void render_entity(const Entity *e);
-/* scan_active: show all guards through walls (network scan effect) */
+/* scan_active: show all guards/drones through walls (network scan effect) */
 void render_guards(const GuardList *gl, const Map *map, bool scan_active);
+/* Draw drones; scan_active reveals them through walls like guards. */
+void render_drones(const DroneList *dl, const Map *map, bool scan_active);
 /* Draw all active projectiles over the current frame. */
 void render_projectiles(const ProjectileList *pl);
 /* bt_avail: Bullet Time ready to use; bt_active: extra action in progress.
  * gp_timer: turns remaining on Ghost Protocol (0 = inactive).
- * door_locked / extract_locked: mission objective state for status display.
+ * door_locked / stairs_locked: mission objective state for status display.
+ * current_floor / num_floors: floor progress (num_floors>1 shows FL indicator).
  * msg: one-turn feedback message (empty string = none). */
 void render_status(const Entity *e, const GuardList *gl,
+                   const DroneList *dl,
                    bool bt_avail, bool bt_active,
                    bool gp_avail, int gp_timer,
-                   bool door_locked, bool extract_locked,
+                   bool door_locked, bool stairs_locked,
+                   int current_floor, int num_floors,
                    const NetrunnerState *nr,
                    const ChromeState *cr,
                    const char *msg);

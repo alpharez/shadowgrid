@@ -55,6 +55,17 @@ static void proj_init(Projectile *p,
 /* Public API                                                           */
 /* ------------------------------------------------------------------ */
 
+int proj_single(ProjectileList *pl,
+                int sx, int sy, int tx, int ty,
+                int damage, int color_pair, bool hostile)
+{
+    if (pl->count >= MAX_PROJECTILES) return 0;
+    Projectile *p = &pl->p[pl->count++];
+    proj_init(p, sx, sy, tx, ty, damage, color_pair);
+    p->can_hit_player = hostile;
+    return 1;
+}
+
 int proj_flechette(ProjectileList *pl,
                    int sx, int sy, int tx, int ty, int damage)
 {
@@ -79,7 +90,8 @@ int proj_flechette(ProjectileList *pl,
 }
 
 bool proj_step(ProjectileList *pl, const Map *map, GuardList *guards,
-               int px, int py, Item *drops, int *ndrop)
+               DroneList *drones,
+               int px, int py, Item *drops, int *ndrop, int *player_dmg)
 {
     bool any_active = false;
 
@@ -114,6 +126,20 @@ bool proj_step(ProjectileList *pl, const Map *map, GuardList *guards,
                                 px, py, &drop);
             if (item_valid(&drop) && ndrop && *ndrop < MAX_GUARDS)
                 drops[(*ndrop)++] = drop;
+            p->active = false;
+            continue;
+        }
+
+        /* Drone collision: projectiles can hit and damage drones */
+        if (drone_at(drones, p->x, p->y)) {
+            drone_player_attack(drones, p->x, p->y, p->damage, NULL);
+            p->active = false;
+            continue;
+        }
+
+        /* Player collision: only hostile projectiles (e.g. drone shots) */
+        if (p->can_hit_player && p->x == px && p->y == py) {
+            if (player_dmg) *player_dmg += p->damage;
             p->active = false;
             continue;
         }

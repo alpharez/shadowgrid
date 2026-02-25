@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include "map.h"
 #include "guard.h"
+#include "drone.h"
 #include "items.h"
 
 #define MAX_PROJECTILES      8
@@ -13,18 +14,19 @@
  * Positions advance one grid cell per proj_step() call.
  */
 typedef struct {
-    int  x, y;        /* current grid position                          */
-    int  sx, sy;      /* Bresenham step signs (+1 / 0 / -1)             */
-    int  dx, dy;      /* absolute axis differences (Bresenham state)    */
-    int  err;         /* Bresenham error accumulator                    */
-    int  steps_left;  /* Chebyshev distance remaining to target         */
+    int  x, y;           /* current grid position                          */
+    int  sx, sy;         /* Bresenham step signs (+1 / 0 / -1)             */
+    int  dx, dy;         /* absolute axis differences (Bresenham state)    */
+    int  err;            /* Bresenham error accumulator                    */
+    int  steps_left;     /* Chebyshev distance remaining to target         */
     int  damage;
-    char symbol;      /* -, |, \, /  based on travel direction          */
+    char symbol;         /* -, |, \, /  based on travel direction          */
     int  color_pair;
     bool active;
+    bool can_hit_player; /* true for hostile shots (drone→player)          */
 } Projectile;
 
-typedef struct {
+typedef struct ProjectileList {
     Projectile p[MAX_PROJECTILES];
     int        count;
 } ProjectileList;
@@ -39,14 +41,28 @@ int  proj_flechette(ProjectileList *pl,
                     int sx, int sy, int tx, int ty, int damage);
 
 /*
+ * Fire a single shot from (sx,sy) toward (tx,ty).
+ * hostile=true: projectile can hit and damage the player at (px,py).
+ * hostile=false: projectile only hits guards/drones (e.g. hacked-drone fire).
+ * Returns 1 if queued, 0 if the list is full.
+ */
+int  proj_single(ProjectileList *pl,
+                 int sx, int sy, int tx, int ty,
+                 int damage, int color_pair, bool hostile);
+
+/*
  * Advance every active projectile one grid cell along its Bresenham line.
  * - Stops a projectile if it hits a wall/door or goes out of bounds.
- * - Calls guard_player_attack() on any guard occupying the landing cell;
- *   loot drops are appended to drops[0..MAX_GUARDS-1] and *ndrop updated.
+ * - Calls guard_player_attack() on any guard occupying the landing cell.
+ * - Calls drone_player_attack() on any non-hacked drone in the landing cell.
+ * - If a hostile projectile lands on (px,py), adds its damage to *player_dmg
+ *   (pass NULL to skip player-hit detection, e.g. for player-fired shots).
+ *   Guard loot drops are appended to drops[0..MAX_GUARDS-1] / *ndrop.
  * Returns true if at least one projectile is still moving.
  */
 bool proj_step(ProjectileList *pl, const Map *map, GuardList *guards,
-               int px, int py, Item *drops, int *ndrop);
+               DroneList *drones,
+               int px, int py, Item *drops, int *ndrop, int *player_dmg);
 
 /* Reset the list (mark all inactive, set count = 0). */
 void proj_clear(ProjectileList *pl);

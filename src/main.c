@@ -8,6 +8,7 @@
 #include "entity.h"
 #include "items.h"
 #include "guard.h"
+#include "drone.h"
 #include "render.h"
 #include "projectile.h"
 #include "netrunner.h"
@@ -42,7 +43,8 @@ static void ncurses_cleanup(void)
 
 /* Returns true if the action consumed a turn (guards should tick). */
 static bool handle_input(int ch, Entity *player, Map *map,
-                         GuardList *guards, bool *quick_draw_avail,
+                         GuardList *guards, DroneList *drones,
+                         bool *quick_draw_avail,
                          bool *vent_used, bool *bt_avail, bool *bt_active,
                          bool *gp_avail, int *gp_timer,
                          bool *done, char *msg, NetrunnerState *nr,
@@ -100,33 +102,45 @@ static bool handle_input(int ch, Entity *player, Map *map,
     }
 
     case 'x': {
-        /* Hack terminal: player must be on (or, with Remote Detonate, adjacent
-         * to) a TILE_TERMINAL.
-         * Hack power = SKILL_HACKING + deck bonus + Scavenger + Overclock.
+        /* Hack terminal or adjacent drone.
+         * Terminal: Hack power = SKILL_HACKING + deck bonus + Scavenger + Overclock.
          * Quick Hack   (NETRUNNER T1 opt0): success is a free action.
          * Ghost Signal (NETRUNNER T2 opt0): failure raises no alarm.
          * Overclock    (NETRUNNER T2 opt2): +2 power on next attempt.
          * Backdoor King(NETRUNNER T4 opt0): success triggers both effects.
-         * Remote Det.  (NETRUNNER T4 opt2): hack from adjacent tile. */
+         * Remote Det.  (NETRUNNER T4 opt2): hack from adjacent tile.
+         * Drone: always requires adjacency; first jack = HACKED, second = disabled. */
 
         /* Locate the terminal to hack: on current tile, or adjacent (Remote Det.) */
-        int hack_tx = player->x, hack_ty = player->y;
-        if (map->tiles[hack_ty][hack_tx].type != TILE_TERMINAL) {
-            if (!nr->remote_det) return false;
-            bool found = false;
-            for (int dy2 = -1; dy2 <= 1 && !found; dy2++) {
-                for (int dx2 = -1; dx2 <= 1 && !found; dx2++) {
+        int hack_tx = -1, hack_ty = -1;
+        if (map->tiles[player->y][player->x].type == TILE_TERMINAL) {
+            hack_tx = player->x;
+            hack_ty = player->y;
+        } else if (nr->remote_det) {
+            for (int dy2 = -1; dy2 <= 1 && hack_tx < 0; dy2++) {
+                for (int dx2 = -1; dx2 <= 1 && hack_tx < 0; dx2++) {
                     if (dx2 == 0 && dy2 == 0) continue;
                     int nx2 = player->x + dx2, ny2 = player->y + dy2;
                     if (nx2 >= 0 && nx2 < MAP_WIDTH &&
                         ny2 >= 0 && ny2 < MAP_HEIGHT &&
                         map->tiles[ny2][nx2].type == TILE_TERMINAL) {
                         hack_tx = nx2; hack_ty = ny2;
-                        found = true;
                     }
                 }
             }
-            if (!found) return false;
+        }
+
+        /* No terminal — try hacking an adjacent drone instead */
+        if (hack_tx < 0) {
+            int result = drone_hack(drones, player->x, player->y);
+            if (result == 1) {
+                snprintf(msg, 80, "JACK IN -- drone compromised, turned against corp");
+                return true;
+            } else if (result == 2) {
+                snprintf(msg, 80, "DRONE OFFLINE -- remote shutdown successful");
+                return true;
+            }
+            return false;
         }
 
         /* Find terminal index */
@@ -162,11 +176,11 @@ static bool handle_input(int ch, Entity *player, Map *map,
                 map->tiles[map->stairs_y][map->stairs_x].type = TILE_STAIRS;
             map->tiles[hack_ty][hack_tx].type = TILE_FLOOR;
             if (nr->backdoor_king)
-                snprintf(msg, 80, "HACK SUCCESS -- door opened + extraction live (Backdoor King)");
+                snprintf(msg, 80, "HACK SUCCESS -- door opened + stairway live (Backdoor King)");
             else if (map->terminal_effects[tidx] == HACK_OPEN_DOOR)
                 snprintf(msg, 80, "HACK SUCCESS -- security door opened");
             else
-                snprintf(msg, 80, "HACK SUCCESS -- extraction point live");
+                snprintf(msg, 80, "HACK SUCCESS -- stairway unlocked");
             return !has_quick_hack;
         } else {
             if (!has_ghost_signal) {
@@ -265,7 +279,7 @@ static bool handle_input(int ch, Entity *player, Map *map,
         return true;
 
     case 'e': case 'E':
-        /* EMP Specialist (NETRUNNER T3 opt2): stun all visible guards 2 turns.
+        /* EMP Specialist (NETRUNNER T3 opt2): stun all visible guards/drones 2 turns.
          * Once per mission; costs a turn. */
         if (!nr->emp_avail) return false;
         {
@@ -277,8 +291,15 @@ static bool handle_input(int ch, Entity *player, Map *map,
                     hit++;
                 }
             }
+            for (int i = 0; i < drones->count; i++) {
+                Drone *d = &drones->drones[i];
+                if (map->tiles[d->y][d->x].visible) {
+                    d->stun_timer = 2;
+                    hit++;
+                }
+            }
             nr->emp_avail = false;
-            snprintf(msg, 80, "EMP pulse -- %d guard%s stunned",
+            snprintf(msg, 80, "EMP pulse -- %d unit%s stunned",
                      hit, hit == 1 ? "" : "s");
         }
         return true;
@@ -298,6 +319,7 @@ static bool handle_input(int ch, Entity *player, Map *map,
          * Once per mission; free action to trigger. */
         if (!nr->godmode_avail) return false;
         guard_stun_all(guards, 5);
+        drone_stun_all(drones, 5);
         if (map->tiles[map->door_y][map->door_x].type == TILE_DOOR)
             map->tiles[map->door_y][map->door_x].type = TILE_FLOOR;
         if (map->tiles[map->stairs_y][map->stairs_x].type == TILE_STAIRS_LOCKED)
@@ -415,7 +437,7 @@ static bool handle_input(int ch, Entity *player, Map *map,
         if (player->equipped[EQUIP_WEAPON].range <= 0)
             return false;  /* melee weapon or empty slot — no shot */
 
-        /* Find nearest visible guard within weapon range */
+        /* Find nearest visible enemy (guard or non-hacked drone) within weapon range */
         int   range  = player->equipped[EQUIP_WEAPON].range;
         int   best_d = range + 1;
         int   tgt_x  = -1, tgt_y = -1;
@@ -425,6 +447,14 @@ static bool handle_input(int ch, Entity *player, Map *map,
             int dx2 = g->x - player->x, dy2 = g->y - player->y;
             int d   = (abs(dx2) > abs(dy2)) ? abs(dx2) : abs(dy2);
             if (d < best_d) { best_d = d; tgt_x = g->x; tgt_y = g->y; }
+        }
+        for (int i = 0; i < drones->count; i++) {
+            const Drone *dr = &drones->drones[i];
+            if (dr->state == DRONE_HACKED) continue;  /* don't shoot allies */
+            if (!map->tiles[dr->y][dr->x].visible) continue;
+            int dx2 = dr->x - player->x, dy2 = dr->y - player->y;
+            int d   = (abs(dx2) > abs(dy2)) ? abs(dx2) : abs(dy2);
+            if (d < best_d) { best_d = d; tgt_x = dr->x; tgt_y = dr->y; }
         }
         if (tgt_x < 0) return false;  /* no visible target in range */
 
@@ -451,11 +481,12 @@ static bool handle_input(int ch, Entity *player, Map *map,
         Item drops[MAX_GUARDS];
         int  ndrop = 0;
 
-        while (proj_step(&pl, map, guards, player->x, player->y,
-                         drops, &ndrop)) {
+        while (proj_step(&pl, map, guards, drones, player->x, player->y,
+                         drops, &ndrop, NULL)) {
             erase();
             render_map(map);
             render_guards(guards, map, false);
+            render_drones(drones, map, false);
             render_entity(player);
             render_projectiles(&pl);
             refresh();
@@ -523,6 +554,24 @@ static bool handle_input(int ch, Entity *player, Map *map,
             *quick_draw_avail = false;
             return false;  /* free action */
         }
+    } else if (drone_at(drones, nx, ny)) {
+        /* Melee a drone: close the gap and smash it */
+        int dmg = entity_gear_atk(player) + player->skills[SKILL_COMBAT];
+        Item drop = {0};
+        int drones_before = drones->count;
+        drone_player_attack(drones, nx, ny, dmg, &drop);
+        /* Adrenaline: kill restores 2 HP */
+        if (drones->count < drones_before &&
+                (player->tree_bought[2][1] & (1 << 2))) {
+            player->hp += 2;
+            if (player->hp > player->max_hp)
+                player->hp = player->max_hp;
+        }
+        /* Quick Draw: first attack free */
+        if ((player->tree_bought[2][0] & (1 << 0)) && *quick_draw_avail) {
+            *quick_draw_avail = false;
+            return false;
+        }
     } else {
         entity_move(player, map, dx, dy);
     }
@@ -533,16 +582,15 @@ static bool handle_input(int ch, Entity *player, Map *map,
 static GameState game_run(Map *map, Entity *player)
 {
     static GuardList guards;
-
-    map_generate(map);
-    entity_place(player, map);
+    static DroneList drones;
 
     /* Difficulty 0-5 scale derived from mission reward tier */
     int difficulty = player->active_mission_reward / 150;
     if (difficulty > 5) difficulty = 5;
-    guard_spawn(&guards, map, difficulty);
 
-    player->crouched = false;
+    /* Number of floors scales with difficulty: diff 0-1 → 1F, 2-3 → 2F, 4-5 → 3F */
+    int num_floors = 1 + difficulty / 2;
+    if (num_floors > 3) num_floors = 3;
 
     /* Skill-derived constants, recomputed each mission start */
     /* Light Step: SHADOW tree (0), tier 0, option 0 — doubles suspicion threshold */
@@ -580,22 +628,15 @@ static GameState game_run(Map *map, Entity *player)
      * return to UNAWARE (i.e. between distinct encounters). */
     bool quick_draw_avail = HAS_SKILL(2, 0, 0);
 
-    /* Vent Rat: SHADOW tree (0), tier 2, option 2. Once per mission. */
-    bool vent_used = false;
-
-    /* Bullet Time: CHROME tree (2), tier 1, option 0. Once per mission.
-     * bt_active: guard tick is suppressed for the next turn-consuming action. */
-    bool bt_avail  = HAS_SKILL(2, 1, 0);
-    bool bt_active = false;
+    /* Bullet Time: CHROME tree (2), tier 1, option 0. Once per mission. */
+    bool bt_avail = HAS_SKILL(2, 1, 0);
 
     /* Second Wind: CHROME tree (2), tier 3, option 2. Once per mission.
      * Auto-revives from lethal damage with 1 HP. */
     bool sw_avail = HAS_SKILL(2, 3, 2);
 
-    /* Ghost Protocol: SHADOW tree (0), tier 4, option 0. Once per mission.
-     * gp_timer counts down each turn; while > 0 guards' detection range is 0. */
+    /* Ghost Protocol: SHADOW tree (0), tier 4, option 0. Once per mission. */
     bool gp_avail = HAS_SKILL(0, 4, 0);
-    int  gp_timer = 0;
 
     /* Counterattack: CHROME (2), tier 2, opt 1 — passive.
      * When a hunting guard deals melee damage, player auto-strikes them back. */
@@ -606,7 +647,7 @@ static GameState game_run(Map *map, Entity *player)
      * Pain Editor negates this wound penalty entirely. */
     bool pain_editor = HAS_SKILL(2, 2, 2);
 
-    /* Chrome active abilities */
+    /* Chrome active abilities (once per mission) */
     ChromeState cr;
     cr.suppressive_avail = HAS_SKILL(2, 2, 0);  /* Suppressive Fire */
     cr.chrome_rush_avail = HAS_SKILL(2, 3, 0);  /* Chrome Rush       */
@@ -615,14 +656,12 @@ static GameState game_run(Map *map, Entity *player)
     cr.last_dx           = 0;
     cr.last_dy           = 0;
 
-    /* --- Netrunner skill state --- */
+    /* --- Netrunner skill state (once per mission) --- */
     NetrunnerState nr;
     nr.scavenger       = HAS_SKILL(1, 0, 1);
     nr.deep_scan       = HAS_SKILL(1, 0, 2);
     nr.overclock_avail = HAS_SKILL(1, 1, 2);
     nr.overclock_armed = false;
-    nr.trap_avail      = HAS_SKILL(1, 1, 1);
-    nr.trap_count      = 0;
     nr.drone_buddy     = HAS_SKILL(1, 2, 1);
     nr.daemon_avail    = HAS_SKILL(1, 2, 0);
     nr.emp_avail       = HAS_SKILL(1, 2, 2);
@@ -631,185 +670,254 @@ static GameState game_run(Map *map, Entity *player)
     nr.remote_det      = HAS_SKILL(1, 3, 2);
     nr.godmode_avail   = HAS_SKILL(1, 4, 0);
     nr.godmode_timer   = 0;
+    /* Traps reset per floor (map regenerates, old positions invalid) */
+    nr.trap_avail  = HAS_SKILL(1, 1, 1);
+    nr.trap_count  = 0;
 
-    /* Deep Scan: pre-reveal terminals, security door, and stairs on map */
-    if (nr.deep_scan) {
-        for (int i = 0; i < map->num_terminals; i++)
-            map->tiles[map->terminals[i][1]][map->terminals[i][0]].seen = true;
-        if (map->door_x > 0 || map->door_y > 0)
-            map->tiles[map->door_y][map->door_x].seen = true;
-        map->tiles[map->stairs_y][map->stairs_x].seen = true;
-    }
-
-    fov_compute(map, player->x, player->y, fov_radius);
-
-    char game_msg[80] = "";
     bool done = false;
-    while (!done) {
-        erase();
-        render_map(map);
-        render_guards(&guards, map, nr.drone_buddy);
-        render_entity(player);
+    int current_floor = 1;
 
-        /* Predict Patrol: SHADOW (0), tier 2, opt 1 — overlay guard patrol
-         * waypoints on the map as dim '+' markers on explored tiles. */
-        if (predict_patrol) {
-            for (int i = 0; i < guards.count; i++) {
-                const Guard *g = &guards.guards[i];
-                for (int wp = 0; wp < 2; wp++) {
-                    int wx = g->patrol[wp][0], wy = g->patrol[wp][1];
-                    if (map->tiles[wy][wx].visible || map->tiles[wy][wx].seen) {
-                        attron(COLOR_PAIR(COL_MENU_DIM));
-                        mvaddch(wy, wx, '+');
-                        attroff(COLOR_PAIR(COL_MENU_DIM));
-                    }
-                }
-            }
-        }
+    while (!done) {  /* floor loop: iterate until mission complete or abort */
+        map_generate(map);
+        entity_place(player, map);
+        guard_spawn(&guards, map, difficulty);
+        drone_spawn(&drones, map, difficulty);
 
-        /* Trap Master: show placed traps as yellow ^ if visible */
-        for (int t = 0; t < nr.trap_count; t++) {
-            if (map->tiles[nr.trap_y[t]][nr.trap_x[t]].visible) {
-                attron(COLOR_PAIR(COL_GUARD_SUSPICIOUS) | A_BOLD);
-                mvaddch(nr.trap_y[t], nr.trap_x[t], '^');
-                attroff(COLOR_PAIR(COL_GUARD_SUSPICIOUS) | A_BOLD);
-            }
-        }
+        player->crouched = false;
 
-        bool door_locked    = (map->tiles[map->door_y][map->door_x].type == TILE_DOOR);
-        bool extract_locked = (map->tiles[map->stairs_y][map->stairs_x].type == TILE_STAIRS_LOCKED);
-        render_status(player, &guards, bt_avail, bt_active, gp_avail, gp_timer,
-                      door_locked, extract_locked, &nr, &cr, game_msg);
-        refresh();
-        game_msg[0] = '\0';  /* clear after one displayed frame */
+        /* Per-floor resets: vent positions change with new map */
+        bool vent_used = false;
+        bool bt_active = false;
+        int  gp_timer  = 0;
+        nr.trap_count  = 0;
+        nr.trap_avail  = HAS_SKILL(1, 1, 1);
 
-        /* Snapshot position and guard count before input for post-turn analysis */
-        int old_px = player->x, old_py = player->y;
-        int guards_before = guards.count;
-
-        int ch = getch();
-        bool turn_used = handle_input(ch, player, map, &guards,
-                                      &quick_draw_avail, &vent_used,
-                                      &bt_avail, &bt_active,
-                                      &gp_avail, &gp_timer,
-                                      &done, game_msg, &nr, &cr);
-
-        if (done)
-            return GAME_STATE_HUB;
-
-        bool player_moved = (player->x != old_px || player->y != old_py);
-        bool killed_guard = (guards.count < guards_before);
-
-        /* REAPER: CHROME (2), tier 4, opt 0 — each kill grants a bonus action.
-         * Set bt_active so the guard tick is skipped after this turn, giving the
-         * player another free action to chain kills. */
-        if (cr.reaper_active && killed_guard)
-            bt_active = true;
-
-        /* Guards only act when the player used a turn */
-        if (turn_used) {
-            /* Bullet Time: CHROME (2), tier 1, opt 0 — first action after
-             * activation skips the guard tick, giving 2 actions in 1 turn. */
-            if (bt_active) {
-                bt_active = false;  /* consume the free action; guards sit still */
-            } else {
-                /* Ghost Protocol: SHADOW (0), tier 4, opt 0 — invisible to guards */
-                int det;
-                if (gp_timer > 0) {
-                    det = 0;
-                    gp_timer--;
-                } else {
-                    det = guard_detection_range(player->crouched,
-                                                player->skills[SKILL_STEALTH]);
-                    /* Shadow Meld: SHADOW (0), tier 1, opt 0 — standing still = 0 det */
-                    if (shadow_meld && !player_moved)
-                        det = 0;
-                    /* Wall Hug: SHADOW (0), tier 1, opt 2 — adjacent wall -1 range */
-                    if (HAS_SKILL(0, 1, 2) && near_wall(map, player->x, player->y))
-                        det = det > 1 ? det - 1 : 1;
-                    /* Cat Fall: SHADOW (0), tier 3, opt 2 — crouched -1 range */
-                    if (cat_fall && player->crouched)
-                        det = det > 1 ? det - 1 : 1;
-                    /* Pain Editor: CHROME (2), tier 2, opt 2 — wound penalty.
-                     * Below half HP: bleeding/laboured breathing gives +2 detection.
-                     * Pain Editor negates this entirely. */
-                    if (!pain_editor && player->hp > 0 &&
-                            player->hp < player->max_hp / 2)
-                        det += 2;
-                }
-                int dmg = guard_tick_all(&guards, map, player->x, player->y,
-                                         det, suspicion_max, suspicion_decay,
-                                         vanish);
-                player->hp -= dmg;
-                /* Second Wind: CHROME (2), tier 3, opt 2 — survive lethal hit once */
-                if (player->hp <= 0 && sw_avail) {
-                    player->hp = 1;
-                    sw_avail = false;
-                }
-
-                /* Counterattack: CHROME (2), tier 2, opt 1 — auto-strike on hit.
-                 * Find the adjacent hunting guard that dealt damage and counter them. */
-                if (dmg > 0 && counterattack) {
-                    for (int i = 0; i < guards.count; i++) {
-                        Guard *g = &guards.guards[i];
-                        if (g->state != GUARD_HUNTING) continue;
-                        int cdx = g->x - player->x;
-                        int cdy = g->y - player->y;
-                        if (cdx < 0) cdx = -cdx;
-                        if (cdy < 0) cdy = -cdy;
-                        if ((cdx > cdy ? cdx : cdy) == 1) {
-                            int cnt_dmg = entity_gear_atk(player) +
-                                          player->skills[SKILL_COMBAT];
-                            Item cnt_drop = {0};
-                            guard_player_attack(&guards, g->x, g->y, cnt_dmg,
-                                                player->x, player->y, &cnt_drop);
-                            if (item_valid(&cnt_drop))
-                                entity_inv_add(player, cnt_drop);
-                            snprintf(game_msg, 80, "COUNTERATTACK! (%d dmg)", cnt_dmg);
-                            break;
-                        }
-                    }
-                }
-
-                /* Trap Master: stun guards that walked onto a trap tile */
-                for (int i = 0; i < guards.count; i++) {
-                    for (int t = 0; t < nr.trap_count; t++) {
-                        if (guards.guards[i].x == nr.trap_x[t] &&
-                            guards.guards[i].y == nr.trap_y[t]) {
-                            guards.guards[i].stun_timer = 3;
-                            /* Remove trap (swap with last) */
-                            nr.trap_x[t] = nr.trap_x[nr.trap_count - 1];
-                            nr.trap_y[t] = nr.trap_y[nr.trap_count - 1];
-                            nr.trap_count--;
-                            t--;
-                        }
-                    }
-                }
-
-                /* GOD MODE timer countdown */
-                if (nr.godmode_timer > 0)
-                    nr.godmode_timer--;
-                if (player->hp <= 0)
-                    return GAME_STATE_HUB;  /* caught — TODO: death screen */
-
-                /* Re-arm Quick Draw when the area goes quiet again */
-                if (!quick_draw_avail && HAS_SKILL(2, 0, 0) &&
-                        guard_max_state(&guards) == GUARD_UNAWARE)
-                    quick_draw_avail = true;
-            }
+        /* Deep Scan: pre-reveal terminals, security door, and stairs on map */
+        if (nr.deep_scan) {
+            for (int i = 0; i < map->num_terminals; i++)
+                map->tiles[map->terminals[i][1]][map->terminals[i][0]].seen = true;
+            if (map->door_x > 0 || map->door_y > 0)
+                map->tiles[map->door_y][map->door_x].seen = true;
+            map->tiles[map->stairs_y][map->stairs_x].seen = true;
         }
 
         fov_compute(map, player->x, player->y, fov_radius);
 
-        /* Check if player is standing on extraction stairs */
-        if (map->tiles[player->y][player->x].type == TILE_STAIRS) {
-            int difficulty = player->active_mission_reward / 150;
-            item_loot_mission(difficulty,
-                              player->pending_loot,
-                              &player->pending_loot_count);
-            return GAME_STATE_DEBRIEF;
-        }
-    }
+        char game_msg[80] = "";
+        bool next_floor = false;
+
+        while (!done && !next_floor) {
+            erase();
+            render_map(map);
+            render_guards(&guards, map, nr.drone_buddy);
+            render_drones(&drones, map, nr.drone_buddy);
+            render_entity(player);
+
+            /* Predict Patrol: SHADOW (0), tier 2, opt 1 — overlay guard patrol
+             * waypoints on the map as dim '+' markers on explored tiles. */
+            if (predict_patrol) {
+                for (int i = 0; i < guards.count; i++) {
+                    const Guard *g = &guards.guards[i];
+                    for (int wp = 0; wp < 2; wp++) {
+                        int wx = g->patrol[wp][0], wy = g->patrol[wp][1];
+                        if (map->tiles[wy][wx].visible || map->tiles[wy][wx].seen) {
+                            attron(COLOR_PAIR(COL_MENU_DIM));
+                            mvaddch(wy, wx, '+');
+                            attroff(COLOR_PAIR(COL_MENU_DIM));
+                        }
+                    }
+                }
+            }
+
+            /* Trap Master: show placed traps as yellow ^ if visible */
+            for (int t = 0; t < nr.trap_count; t++) {
+                if (map->tiles[nr.trap_y[t]][nr.trap_x[t]].visible) {
+                    attron(COLOR_PAIR(COL_GUARD_SUSPICIOUS) | A_BOLD);
+                    mvaddch(nr.trap_y[t], nr.trap_x[t], '^');
+                    attroff(COLOR_PAIR(COL_GUARD_SUSPICIOUS) | A_BOLD);
+                }
+            }
+
+            bool door_locked    = (map->tiles[map->door_y][map->door_x].type == TILE_DOOR);
+            bool stairs_locked  = (map->tiles[map->stairs_y][map->stairs_x].type == TILE_STAIRS_LOCKED);
+            render_status(player, &guards, &drones, bt_avail, bt_active, gp_avail, gp_timer,
+                          door_locked, stairs_locked, current_floor, num_floors,
+                          &nr, &cr, game_msg);
+            refresh();
+            game_msg[0] = '\0';  /* clear after one displayed frame */
+
+            /* Snapshot position and enemy counts before input for post-turn analysis */
+            int old_px = player->x, old_py = player->y;
+            int guards_before = guards.count;
+            int drones_before = drones.count;
+
+            int ch = getch();
+            bool turn_used = handle_input(ch, player, map, &guards, &drones,
+                                          &quick_draw_avail, &vent_used,
+                                          &bt_avail, &bt_active,
+                                          &gp_avail, &gp_timer,
+                                          &done, game_msg, &nr, &cr);
+
+            if (done)
+                break;
+
+            bool player_moved  = (player->x != old_px || player->y != old_py);
+            bool killed_enemy  = (guards.count < guards_before ||
+                                  drones.count < drones_before);
+
+            /* REAPER: CHROME (2), tier 4, opt 0 — each kill grants a bonus action. */
+            if (cr.reaper_active && killed_enemy)
+                bt_active = true;
+
+            /* Guards only act when the player used a turn */
+            if (turn_used) {
+                /* Bullet Time: CHROME (2), tier 1, opt 0 — first action after
+                 * activation skips the guard tick, giving 2 actions in 1 turn. */
+                if (bt_active) {
+                    bt_active = false;  /* consume the free action; guards sit still */
+                } else {
+                    /* Ghost Protocol: SHADOW (0), tier 4, opt 0 — invisible to guards */
+                    int det;
+                    if (gp_timer > 0) {
+                        det = 0;
+                        gp_timer--;
+                    } else {
+                        det = guard_detection_range(player->crouched,
+                                                    player->skills[SKILL_STEALTH]);
+                        /* Shadow Meld: SHADOW (0), tier 1, opt 0 — standing still = 0 det */
+                        if (shadow_meld && !player_moved)
+                            det = 0;
+                        /* Wall Hug: SHADOW (0), tier 1, opt 2 — adjacent wall -1 range */
+                        if (HAS_SKILL(0, 1, 2) && near_wall(map, player->x, player->y))
+                            det = det > 1 ? det - 1 : 1;
+                        /* Cat Fall: SHADOW (0), tier 3, opt 2 — crouched -1 range */
+                        if (cat_fall && player->crouched)
+                            det = det > 1 ? det - 1 : 1;
+                        /* Pain Editor: CHROME (2), tier 2, opt 2 — wound penalty.
+                         * Below half HP: bleeding/laboured breathing gives +2 detection.
+                         * Pain Editor negates this entirely. */
+                        if (!pain_editor && player->hp > 0 &&
+                                player->hp < player->max_hp / 2)
+                            det += 2;
+                    }
+                    int dmg = guard_tick_all(&guards, map, player->x, player->y,
+                                             det, suspicion_max, suspicion_decay,
+                                             vanish);
+                    /* Drones tick after guards: shots are queued as animated projectiles */
+                    {
+                        ProjectileList drone_pl;
+                        proj_clear(&drone_pl);
+                        drone_tick_all(&drones, map, &guards, &drone_pl,
+                                       player->x, player->y);
+
+                        if (drone_pl.count > 0) {
+                            Item drone_drops[MAX_GUARDS];
+                            int  drone_ndrop = 0;
+                            int  drone_pdmg  = 0;
+                            while (proj_step(&drone_pl, map, &guards, &drones,
+                                             player->x, player->y,
+                                             drone_drops, &drone_ndrop, &drone_pdmg)) {
+                                erase();
+                                render_map(map);
+                                render_guards(&guards, map, nr.drone_buddy);
+                                render_drones(&drones, map, nr.drone_buddy);
+                                render_entity(player);
+                                render_projectiles(&drone_pl);
+                                refresh();
+                                napms(55);
+                            }
+                            player->hp -= drone_pdmg;
+                            if (drone_pdmg > 0 && game_msg[0] == '\0')
+                                snprintf(game_msg, 80, "DRONE HIT -- %d damage!", drone_pdmg);
+                            /* Loot from guards killed by hacked-drone shots */
+                            for (int i = 0; i < drone_ndrop; i++)
+                                if (item_valid(&drone_drops[i]))
+                                    entity_inv_add(player, drone_drops[i]);
+                        }
+                    }
+                    player->hp -= dmg;
+                    /* Second Wind: CHROME (2), tier 3, opt 2 — survive lethal hit once */
+                    if (player->hp <= 0 && sw_avail) {
+                        player->hp = 1;
+                        sw_avail = false;
+                    }
+
+                    /* Counterattack: CHROME (2), tier 2, opt 1 — auto-strike on hit.
+                     * Find the adjacent hunting guard that dealt damage and counter them. */
+                    if (dmg > 0 && counterattack) {
+                        for (int i = 0; i < guards.count; i++) {
+                            Guard *g = &guards.guards[i];
+                            if (g->state != GUARD_HUNTING) continue;
+                            int cdx = g->x - player->x;
+                            int cdy = g->y - player->y;
+                            if (cdx < 0) cdx = -cdx;
+                            if (cdy < 0) cdy = -cdy;
+                            if ((cdx > cdy ? cdx : cdy) == 1) {
+                                int cnt_dmg = entity_gear_atk(player) +
+                                              player->skills[SKILL_COMBAT];
+                                Item cnt_drop = {0};
+                                guard_player_attack(&guards, g->x, g->y, cnt_dmg,
+                                                    player->x, player->y, &cnt_drop);
+                                if (item_valid(&cnt_drop))
+                                    entity_inv_add(player, cnt_drop);
+                                snprintf(game_msg, 80, "COUNTERATTACK! (%d dmg)", cnt_dmg);
+                                break;
+                            }
+                        }
+                    }
+
+                    /* Trap Master: stun guards that walked onto a trap tile */
+                    for (int i = 0; i < guards.count; i++) {
+                        for (int t = 0; t < nr.trap_count; t++) {
+                            if (guards.guards[i].x == nr.trap_x[t] &&
+                                guards.guards[i].y == nr.trap_y[t]) {
+                                guards.guards[i].stun_timer = 3;
+                                /* Remove trap (swap with last) */
+                                nr.trap_x[t] = nr.trap_x[nr.trap_count - 1];
+                                nr.trap_y[t] = nr.trap_y[nr.trap_count - 1];
+                                nr.trap_count--;
+                                t--;
+                            }
+                        }
+                    }
+
+                    /* GOD MODE timer countdown */
+                    if (nr.godmode_timer > 0)
+                        nr.godmode_timer--;
+                    if (player->hp <= 0)
+                        return GAME_STATE_DEAD;
+
+                    /* Re-arm Quick Draw when the area goes quiet (all unaware/patrol) */
+                    if (!quick_draw_avail && HAS_SKILL(2, 0, 0) &&
+                            guard_max_state(&guards) == GUARD_UNAWARE &&
+                            !drone_any_alert(&drones))
+                        quick_draw_avail = true;
+                }
+            }
+
+            fov_compute(map, player->x, player->y, fov_radius);
+
+            /* Check if player is standing on an unlocked stairway */
+            if (map->tiles[player->y][player->x].type == TILE_STAIRS) {
+                if (current_floor >= num_floors) {
+                    /* Final floor: extract — mission complete */
+                    item_loot_mission(difficulty,
+                                      player->pending_loot,
+                                      &player->pending_loot_count);
+                    return GAME_STATE_DEBRIEF;
+                } else {
+                    /* Intermediate floor: descend to next level */
+                    snprintf(game_msg, 80, "DESCENDING -- floor %d of %d",
+                             current_floor + 1, num_floors);
+                    next_floor = true;
+                }
+            }
+        }  /* end inner game loop */
+
+        if (next_floor)
+            current_floor++;
+        /* if done=true, exit floor loop and return to hub */
+    }  /* end floor loop */
 
     return GAME_STATE_HUB;
 }
@@ -831,6 +939,7 @@ int main(void)
         case GAME_STATE_HUB:     state = hub_run(&player);         break;
         case GAME_STATE_PLAYING:  state = game_run(&map, &player);  break;
         case GAME_STATE_DEBRIEF:  state = debrief_run(&player);     break;
+        case GAME_STATE_DEAD:     state = death_run(&player);       break;
         default:                  state = GAME_STATE_QUIT;          break;
         }
     }

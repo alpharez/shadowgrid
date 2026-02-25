@@ -1439,3 +1439,62 @@ GameState debrief_run(Entity *player)
     player->pending_loot_count = 0;
     return GAME_STATE_HUB;
 }
+
+/* ------------------------------------------------------------------ */
+/* Death screen                                                         */
+/* ------------------------------------------------------------------ */
+
+GameState death_run(Entity *player)
+{
+    hub_title();
+
+    WINDOW *win = make_panel("FLATLINED");
+    menu_draw_box(win, "FLATLINED");
+
+    wattron(win, COLOR_PAIR(COL_GUARD_ALERT) | A_BOLD);
+    mvwprintw(win, 4, 3, "  // NEURAL LINK SEVERED //");
+    wattroff(win, COLOR_PAIR(COL_GUARD_ALERT) | A_BOLD);
+
+    wattron(win, COLOR_PAIR(COL_MENU_DIM));
+    mvwprintw(win, 6, 3, "Runner status   : FLATLINED");
+    mvwprintw(win, 7, 3, "Level reached   : %d",  player->level);
+    mvwprintw(win, 8, 3, "Credits banked  : %d\xc2\xa2", player->credits);
+    wattroff(win, COLOR_PAIR(COL_MENU_DIM));
+
+    static const char *opts[] = { "New Game", "Exit" };
+    int nopts = 2;
+    int sel   = 0;
+
+    while (1) {
+        for (int i = 0; i < nopts; i++) {
+            if (i == sel) {
+                wattron(win, COLOR_PAIR(COL_MENU_SEL) | A_BOLD);
+                mvwprintw(win, 11 + i * 2, 5, "> %s", opts[i]);
+                wattroff(win, COLOR_PAIR(COL_MENU_SEL) | A_BOLD);
+            } else {
+                wattron(win, COLOR_PAIR(COL_MENU_DIM));
+                mvwprintw(win, 11 + i * 2, 5, "  %s", opts[i]);
+                wattroff(win, COLOR_PAIR(COL_MENU_DIM));
+            }
+        }
+
+        wattron(win, COLOR_PAIR(COL_MENU_DIM));
+        mvwprintw(win, HUB_H - 3, 3, "[j/k] navigate   [Enter] select");
+        wattroff(win, COLOR_PAIR(COL_MENU_DIM));
+
+        wrefresh(win);
+
+        int ch = wgetch(win);
+        switch (ch) {
+        case KEY_UP:   case 'k': sel = (sel - 1 + nopts) % nopts; break;
+        case KEY_DOWN: case 'j': sel = (sel + 1) % nopts;         break;
+        case '\n': case KEY_ENTER:
+            delwin(win);
+            if (sel == 0) {
+                entity_init(player);
+                return GAME_STATE_HUB;
+            }
+            return GAME_STATE_QUIT;
+        }
+    }
+}

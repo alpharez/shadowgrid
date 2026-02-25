@@ -47,6 +47,8 @@ void render_init(void)
         init_pair(COL_DOOR,            208,  -1);  /* xterm-256 amber/orange */
         init_pair(COL_PROJECTILE,      231,  -1);  /* xterm-256 pure white (needle) */
         init_pair(COL_GUARD_ELITE,      75,  -1);  /* xterm-256 steel blue */
+        init_pair(COL_DRONE,           141,  -1);  /* xterm-256 violet     */
+        init_pair(COL_DRONE_HACKED,     46,  -1);  /* xterm-256 bright green */
     } else {
         /* 8-color fallback */
         init_pair(COL_FLOOR_VIS,  COLOR_CYAN,    -1);
@@ -77,6 +79,8 @@ void render_init(void)
         init_pair(COL_DOOR,             COLOR_YELLOW,  -1);
         init_pair(COL_PROJECTILE,       COLOR_WHITE,   -1);
         init_pair(COL_GUARD_ELITE,      COLOR_CYAN,    -1);
+        init_pair(COL_DRONE,            COLOR_MAGENTA, -1);
+        init_pair(COL_DRONE_HACKED,     COLOR_GREEN,   -1);
     }
 }
 
@@ -211,6 +215,33 @@ void render_guards(const GuardList *gl, const Map *map, bool scan_active)
     }
 }
 
+void render_drones(const DroneList *dl, const Map *map, bool scan_active)
+{
+    for (int i = 0; i < dl->count; i++) {
+        const Drone *d = &dl->drones[i];
+        if (!map->tiles[d->y][d->x].visible && !scan_active) continue;
+
+        int    col;
+        attr_t attr = A_BOLD;
+
+        if (d->stun_timer > 0) {
+            col  = COL_GUARD_STUNNED;
+            attr = 0;
+        } else {
+            switch (d->state) {
+            case DRONE_PATROL: col = COL_DRONE;        break;
+            case DRONE_ALERT:  col = COL_GUARD_ALERT;  break;
+            case DRONE_HACKED: col = COL_DRONE_HACKED; break;
+            default:           col = COL_DRONE;        break;
+            }
+        }
+
+        attron(COLOR_PAIR(col) | attr);
+        mvaddch(d->y, d->x, 'd');
+        attroff(COLOR_PAIR(col) | attr);
+    }
+}
+
 void render_projectiles(const ProjectileList *pl)
 {
     for (int i = 0; i < pl->count; i++) {
@@ -223,9 +254,11 @@ void render_projectiles(const ProjectileList *pl)
 }
 
 void render_status(const Entity *e, const GuardList *gl,
+                   const DroneList *dl,
                    bool bt_avail, bool bt_active,
                    bool gp_avail, int gp_timer,
-                   bool door_locked, bool extract_locked,
+                   bool door_locked, bool stairs_locked,
+                   int current_floor, int num_floors,
                    const NetrunnerState *nr,
                    const ChromeState *cr,
                    const char *msg)
@@ -248,14 +281,20 @@ void render_status(const Entity *e, const GuardList *gl,
         printw("  [DOOR:OPEN]");
         attroff(COLOR_PAIR(COL_STAIRS) | A_BOLD);
     }
-    if (extract_locked) {
+    if (stairs_locked) {
         attron(COLOR_PAIR(COL_GUARD_ALERT) | A_BOLD);
-        printw("  [EXIT:LOCKED]");
+        printw("  [STAIRS:LOCKED]");
         attroff(COLOR_PAIR(COL_GUARD_ALERT) | A_BOLD);
     } else {
         attron(COLOR_PAIR(COL_STAIRS) | A_BOLD);
-        printw("  [EXIT:LIVE]");
+        printw("  [STAIRS:LIVE]");
         attroff(COLOR_PAIR(COL_STAIRS) | A_BOLD);
+    }
+    /* Floor progress indicator (multi-floor missions only) */
+    if (num_floors > 1) {
+        attron(COLOR_PAIR(COL_STATUS) | A_BOLD);
+        printw("  [FL:%d/%d]", current_floor, num_floors);
+        attroff(COLOR_PAIR(COL_STATUS) | A_BOLD);
     }
 
     /* Crouch indicator */
@@ -285,6 +324,13 @@ void render_status(const Entity *e, const GuardList *gl,
         attron(COLOR_PAIR(COL_MENU_DIM) | A_BOLD);
         printw("  [GHOST RDY]");
         attroff(COLOR_PAIR(COL_MENU_DIM) | A_BOLD);
+    }
+
+    /* Drone alert indicator */
+    if (dl && drone_any_alert(dl)) {
+        attron(COLOR_PAIR(COL_GUARD_ALERT) | A_BOLD);
+        printw("  ~ DRONE!");
+        attroff(COLOR_PAIR(COL_GUARD_ALERT) | A_BOLD);
     }
 
     /* Guard alert indicator */
