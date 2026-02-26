@@ -49,6 +49,14 @@ void render_init(void)
         init_pair(COL_GUARD_ELITE,      75,  -1);  /* xterm-256 steel blue */
         init_pair(COL_DRONE,           141,  -1);  /* xterm-256 violet     */
         init_pair(COL_DRONE_HACKED,     46,  -1);  /* xterm-256 bright green */
+        /* Hub NPC colours */
+        init_pair(COL_HUB_ARMS,        196,  -1);  /* bright red   */
+        init_pair(COL_HUB_RIPPERDOC,    51,  -1);  /* cyan         */
+        init_pair(COL_HUB_FIXER,       226,  -1);  /* yellow       */
+        init_pair(COL_HUB_TECH,         39,  -1);  /* electric blue */
+        init_pair(COL_HUB_FENCE,       129,  -1);  /* magenta      */
+        init_pair(COL_HUB_MEDIC,        46,  -1);  /* bright green */
+        init_pair(COL_HUB_AMBIENT,     245,  -1);  /* medium gray  */
     } else {
         /* 8-color fallback */
         init_pair(COL_FLOOR_VIS,  COLOR_CYAN,    -1);
@@ -81,6 +89,14 @@ void render_init(void)
         init_pair(COL_GUARD_ELITE,      COLOR_CYAN,    -1);
         init_pair(COL_DRONE,            COLOR_MAGENTA, -1);
         init_pair(COL_DRONE_HACKED,     COLOR_GREEN,   -1);
+        /* Hub NPC colours (8-color fallback) */
+        init_pair(COL_HUB_ARMS,        COLOR_RED,     -1);
+        init_pair(COL_HUB_RIPPERDOC,   COLOR_CYAN,    -1);
+        init_pair(COL_HUB_FIXER,       COLOR_YELLOW,  -1);
+        init_pair(COL_HUB_TECH,        COLOR_BLUE,    -1);
+        init_pair(COL_HUB_FENCE,       COLOR_MAGENTA, -1);
+        init_pair(COL_HUB_MEDIC,       COLOR_GREEN,   -1);
+        init_pair(COL_HUB_AMBIENT,     COLOR_WHITE,   -1);
     }
 }
 

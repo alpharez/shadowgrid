@@ -12,8 +12,8 @@ typedef enum {
     GAME_STATE_QUIT,
 } GameState;
 
-/* Run the hub loop. Returns the next GameState. */
-GameState hub_run(Entity *player);
+/* Run the physical hub map loop. Returns the next GameState. */
+GameState hub_map_run(Entity *player);
 
 /* Run the debrief screen. Awards mission reward and returns GAME_STATE_HUB. */
 GameState debrief_run(Entity *player);
@@ -30,3 +30,13 @@ void hub_levelup_menu(Entity *player);
 /* In-mission inventory overlay: browse backpack, equip items.
  * Draws over the current map frame; restores stdscr on close. */
 void mission_inventory(Entity *player);
+
+/* Shop entry points for hub map (called by hub_map.c NPC interactions). */
+void hub_shop_weapons(Entity *player);
+void hub_shop_cybernetics(Entity *player);
+void hub_shop_tech(Entity *player);
+void hub_shop_consumables(Entity *player);
+void hub_shop_fence(Entity *player);
+GameState hub_screen_missions(Entity *player);
+void hub_screen_equipment(Entity *player);
+void hub_screen_inventory(Entity *player);

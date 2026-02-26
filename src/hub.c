@@ -789,6 +789,251 @@ static void screen_shop(Entity *player)
 }
 
 /* ------------------------------------------------------------------ */
+/* Filtered gear shop (used by hub NPC shops)                          */
+/* ------------------------------------------------------------------ */
+
+typedef enum {
+    SHOPF_WEAPON,
+    SHOPF_TECH,       /* armor (head/body/legs) + decks */
+    SHOPF_CONSUMABLE,
+} ShopGearFilter;
+
+static bool shopf_matches(const Item *it, ShopGearFilter f)
+{
+    switch (f) {
+    case SHOPF_WEAPON:     return it->type == ITEM_WEAPON;
+    case SHOPF_TECH:       return it->type == ITEM_ARMOR_HEAD
+                               || it->type == ITEM_ARMOR_BODY
+                               || it->type == ITEM_ARMOR_LEGS
+                               || it->type == ITEM_DECK;
+    case SHOPF_CONSUMABLE: return it->type == ITEM_CONSUMABLE;
+    default:               return true;
+    }
+}
+
+static void screen_shop_gear_filtered(Entity *player, const char *title,
+                                      ShopGearFilter filter)
+{
+    WINDOW *win = make_panel(title);
+#define FLT_VISIBLE (HUB_H - 8)
+
+    int vis_idx[SHOP_GEAR_COUNT];
+    int vis_n   = 0;
+    int sel     = 0;
+    int scroll  = 0;
+    bool dirty  = true;
+
+    while (1) {
+        /* Rebuild list each frame (purchases remove non-consumables) */
+        vis_n = 0;
+        for (int i = 0; i < SHOP_GEAR_COUNT; i++) {
+            if (filter == SHOPF_CONSUMABLE) {
+                if (shopf_matches(&shop_gear[i], filter))
+                    vis_idx[vis_n++] = i;
+            } else {
+                if (!gear_sold[i] && shopf_matches(&shop_gear[i], filter))
+                    vis_idx[vis_n++] = i;
+            }
+        }
+
+        if (sel >= vis_n) sel = vis_n > 0 ? vis_n - 1 : 0;
+        if (scroll > sel) scroll = sel;
+        if (scroll + FLT_VISIBLE <= sel) scroll = sel - FLT_VISIBLE + 1;
+
+        if (dirty) {
+            werase(win);
+            menu_draw_box(win, title);
+
+            wattron(win, COLOR_PAIR(COL_MENU_TITLE) | A_BOLD);
+            mvwprintw(win, 2, 3, "Credits: %d\xc2\xa2   %d item(s) available",
+                      player->credits, vis_n);
+            wattroff(win, COLOR_PAIR(COL_MENU_TITLE) | A_BOLD);
+
+            wattron(win, COLOR_PAIR(COL_MENU_DIM));
+            mvwprintw(win, 3, 3, " [TYPE  ] %-16s %-8s Stats   Price",
+                      "Name", "Rarity");
+            wattroff(win, COLOR_PAIR(COL_MENU_DIM));
+            mvwhline(win, 4, 1, ACS_HLINE, HUB_W - 2);
+
+            if (vis_n == 0) {
+                wattron(win, COLOR_PAIR(COL_MENU_DIM));
+                mvwprintw(win, 5, 3, "-- out of stock --");
+                wattroff(win, COLOR_PAIR(COL_MENU_DIM));
+            }
+
+            if (scroll > 0) {
+                wattron(win, COLOR_PAIR(COL_MENU_DIM));
+                mvwprintw(win, 4, HUB_W - 7, " [/\\]");
+                wattroff(win, COLOR_PAIR(COL_MENU_DIM));
+            }
+
+            int row = 5;
+            for (int g = scroll; g < vis_n && row < 5 + FLT_VISIBLE; g++) {
+                int   i  = vis_idx[g];
+                Item *it = &shop_gear[i];
+                bool  affordable = player->credits >= it->value;
+                bool  is_sel     = (g == sel);
+
+                attr_t base = is_sel ? (COLOR_PAIR(COL_MENU_SEL) | A_BOLD)
+                            : (!affordable ? COLOR_PAIR(COL_MENU_DIM)
+                                           : (COLOR_PAIR(COL_MENU_DIM) | A_BOLD));
+                wattron(win, base);
+                mvwprintw(win, row, 3, "%s[%s] %-16s",
+                          is_sel ? ">" : " ",
+                          item_type_label(it->type), it->name);
+                wattroff(win, base);
+
+                int rcol = item_rarity_color(it->rarity);
+                wattron(win, COLOR_PAIR(rcol) | (is_sel ? A_BOLD : 0));
+                mvwprintw(win, row, 30, "%-8s", item_rarity_name(it->rarity));
+                wattroff(win, COLOR_PAIR(rcol) | (is_sel ? A_BOLD : 0));
+
+                wattron(win, base);
+                if (it->type == ITEM_WEAPON && it->range > 0)
+                    mvwprintw(win, row, 39, "%+d%-3s rng%-2d %4d\xc2\xa2",
+                              it->stat_bonus, stat_label(it->type),
+                              it->range, it->value);
+                else
+                    mvwprintw(win, row, 39, "%+d%-3s        %4d\xc2\xa2",
+                              it->stat_bonus, stat_label(it->type), it->value);
+                wattroff(win, base);
+                row++;
+            }
+
+            if (scroll + FLT_VISIBLE < vis_n) {
+                wattron(win, COLOR_PAIR(COL_MENU_DIM));
+                mvwprintw(win, 5 + FLT_VISIBLE, HUB_W - 7, " [\\/]");
+                wattroff(win, COLOR_PAIR(COL_MENU_DIM));
+            }
+            mvwhline(win, 5 + FLT_VISIBLE, 1, ACS_HLINE, HUB_W - 2);
+
+            wattron(win, COLOR_PAIR(COL_MENU_DIM));
+            mvwprintw(win, HUB_H - 3, 3,
+                      "[j/k] navigate  [Enter] buy  [Esc/q] back");
+            wattroff(win, COLOR_PAIR(COL_MENU_DIM));
+
+            wrefresh(win);
+            dirty = false;
+        }
+
+        int ch = wgetch(win);
+        switch (ch) {
+        case KEY_UP: case 'k':
+            if (sel > 0) sel--;
+            dirty = true;
+            break;
+        case KEY_DOWN: case 'j':
+            if (vis_n > 0 && sel < vis_n - 1) sel++;
+            dirty = true;
+            break;
+        case '\n': case KEY_ENTER:
+            if (vis_n > 0 && sel < vis_n) {
+                int   gi = vis_idx[sel];
+                Item *it = &shop_gear[gi];
+                if (player->credits >= it->value && entity_inv_add(player, *it)) {
+                    player->credits -= it->value;
+                    if (it->type != ITEM_CONSUMABLE)
+                        gear_sold[gi] = true;
+                    dirty = true;
+                }
+            }
+            break;
+        case 'q': case 27:
+            delwin(win);
+            return;
+        }
+    }
+#undef FLT_VISIBLE
+}
+
+static void screen_shop_augs(Entity *player)
+{
+    WINDOW *win = make_panel("RIPPERDOC");
+    int sel    = 0;
+    bool dirty = true;
+
+    while (1) {
+        int vis_idx[SHOP_COUNT];
+        int vis_n = 0;
+        for (int i = 0; i < SHOP_COUNT; i++)
+            if (!shop_items[i].sold)
+                vis_idx[vis_n++] = i;
+
+        if (sel >= vis_n) sel = vis_n > 0 ? vis_n - 1 : 0;
+
+        if (dirty) {
+            werase(win);
+            menu_draw_box(win, "RIPPERDOC");
+
+            wattron(win, COLOR_PAIR(COL_MENU_TITLE) | A_BOLD);
+            mvwprintw(win, 2, 3, "Credits: %d\xc2\xa2   Neural augmentation catalog",
+                      player->credits);
+            wattroff(win, COLOR_PAIR(COL_MENU_TITLE) | A_BOLD);
+
+            mvwhline(win, 3, 1, ACS_HLINE, HUB_W - 2);
+
+            if (vis_n == 0) {
+                wattron(win, COLOR_PAIR(COL_MENU_DIM));
+                mvwprintw(win, 5, 3, "-- all cyberware installed --");
+                wattroff(win, COLOR_PAIR(COL_MENU_DIM));
+            }
+
+            for (int g = 0; g < vis_n; g++) {
+                int       i    = vis_idx[g];
+                ShopItem *it   = &shop_items[i];
+                bool  affordable = player->credits >= it->cost;
+                bool  is_sel     = (g == sel);
+
+                attr_t attr = is_sel ? (COLOR_PAIR(COL_MENU_SEL) | A_BOLD)
+                            : (!affordable ? COLOR_PAIR(COL_MENU_DIM)
+                                           : (COLOR_PAIR(COL_MENU_DIM) | A_BOLD));
+                wattron(win, attr);
+                mvwprintw(win, 4 + g, 3, "%s%-22s %-14s %d\xc2\xa2",
+                          is_sel ? ">" : " ",
+                          it->name, it->desc, it->cost);
+                wattroff(win, attr);
+            }
+
+            mvwhline(win, HUB_H - 4, 1, ACS_HLINE, HUB_W - 2);
+            wattron(win, COLOR_PAIR(COL_MENU_DIM));
+            mvwprintw(win, HUB_H - 3, 3,
+                      "[j/k] navigate  [Enter] install  [Esc/q] back");
+            wattroff(win, COLOR_PAIR(COL_MENU_DIM));
+
+            wrefresh(win);
+            dirty = false;
+        }
+
+        int ch = wgetch(win);
+        switch (ch) {
+        case KEY_UP: case 'k':
+            if (sel > 0) sel--;
+            dirty = true;
+            break;
+        case KEY_DOWN: case 'j':
+            if (vis_n > 0 && sel < vis_n - 1) sel++;
+            dirty = true;
+            break;
+        case '\n': case KEY_ENTER:
+            if (vis_n > 0 && sel < vis_n) {
+                ShopItem *it = &shop_items[vis_idx[sel]];
+                if (!it->sold && player->credits >= it->cost) {
+                    player->credits -= it->cost;
+                    player->skills[it->skill] += it->bonus;
+                    it->sold = true;
+                    if (sel > 0 && sel >= vis_n - 1) sel--;
+                    dirty = true;
+                }
+            }
+            break;
+        case 'q': case 27:
+            delwin(win);
+            return;
+        }
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* Inventory screen                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -1320,7 +1565,51 @@ static GameState screen_missions(Entity *player)
 }
 
 /* ------------------------------------------------------------------ */
-/* Main hub entry point                                                 */
+/* Public shop entry points for hub map                                */
+/* ------------------------------------------------------------------ */
+
+void hub_shop_weapons(Entity *player)
+{
+    screen_shop_gear_filtered(player, "ARMS DEALER", SHOPF_WEAPON);
+}
+
+void hub_shop_tech(Entity *player)
+{
+    screen_shop_gear_filtered(player, "TECH DEALER", SHOPF_TECH);
+}
+
+void hub_shop_consumables(Entity *player)
+{
+    screen_shop_gear_filtered(player, "STREET DOC", SHOPF_CONSUMABLE);
+}
+
+void hub_shop_cybernetics(Entity *player)
+{
+    screen_shop_augs(player);
+}
+
+void hub_shop_fence(Entity *player)
+{
+    screen_inventory(player, ITEM_NONE);
+}
+
+GameState hub_screen_missions(Entity *player)
+{
+    return screen_missions(player);
+}
+
+void hub_screen_equipment(Entity *player)
+{
+    screen_equipment(player);
+}
+
+void hub_screen_inventory(Entity *player)
+{
+    screen_inventory(player, ITEM_NONE);
+}
+
+/* ------------------------------------------------------------------ */
+/* Main hub entry point (menu-based, kept for reference)               */
 /* ------------------------------------------------------------------ */
 
 GameState hub_run(Entity *player)

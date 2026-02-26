@@ -50,6 +50,15 @@
 #define COL_DRONE            25  /* patrolling drone (violet) */
 #define COL_DRONE_HACKED     26  /* hacked drone (green, friendly) */
 
+/* Hub NPC colours */
+#define COL_HUB_ARMS         27  /* arms dealer (red)     */
+#define COL_HUB_RIPPERDOC    28  /* ripperdoc  (cyan)     */
+#define COL_HUB_FIXER        29  /* fixer      (yellow)   */
+#define COL_HUB_TECH         30  /* tech dealer (blue)    */
+#define COL_HUB_FENCE        31  /* fence      (magenta)  */
+#define COL_HUB_MEDIC        32  /* street doc (green)    */
+#define COL_HUB_AMBIENT      33  /* ambient NPC (gray)    */
+
 void render_init(void);
 /* cam_x/cam_y: top-left world tile of the viewport (computed by game loop). */
 void render_map(const Map *map, int cam_x, int cam_y);

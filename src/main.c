@@ -14,6 +14,7 @@
 #include "netrunner.h"
 #include "chrome.h"
 #include "hub.h"
+#include "hub_map.h"
 
 /* Returns true if any of the 8 neighbours of (x, y) blocks sight (is a wall). */
 static bool near_wall(const Map *map, int x, int y)
@@ -50,17 +51,21 @@ static bool guard_elite_at(const GuardList *gl, int x, int y)
     return false;
 }
 
-/* Award XP; level up immediately (with skill-tree overlay) if threshold crossed. */
-static void xp_gain(Entity *player, int amount)
+/* Award XP; level up immediately (with skill-tree overlay) if threshold crossed.
+ * Returns true if at least one level-up occurred (caller should refresh passives). */
+static bool xp_gain(Entity *player, int amount)
 {
     player->xp += amount;
+    bool leveled = false;
     while (player->xp >= player->xp_next) {
         player->xp      -= player->xp_next;
         player->level++;
         player->xp_next  = player->level * 100;
         player->skill_points += 2;
         hub_levelup_menu(player);
+        leveled = true;
     }
+    return leveled;
 }
 
 static void ncurses_init(void)
@@ -733,6 +738,42 @@ static GameState game_run(Map *map, Entity *player)
     nr.trap_avail  = HAS_SKILL(1, 1, 1);
     nr.trap_count  = 0;
 
+    /* Macro: re-apply passive skill effects after a mid-mission level-up.
+     * Passive booleans are always recomputed (=).
+     * Once-per-mission actives use |= so a newly-bought skill becomes available
+     * this mission, but an already-used one (flag already false) is not reset. */
+#define LEVELUP_REFRESH() do { \
+    fov_radius      = HAS_SKILL(0, 0, 2) ? FOV_RADIUS_KEEN : FOV_RADIUS; \
+    suspicion_max   = HAS_SKILL(0, 0, 0) ? GUARD_SUSPICION_MAX * 2 : GUARD_SUSPICION_MAX; \
+    if (HAS_SKILL(0, 3, 1)) suspicion_max += 4; \
+    suspicion_decay = HAS_SKILL(0, 1, 1) ? 2 : 1; \
+    vanish          = HAS_SKILL(0, 3, 0); \
+    shadow_meld     = HAS_SKILL(0, 1, 0); \
+    predict_patrol  = HAS_SKILL(0, 2, 1); \
+    cat_fall        = HAS_SKILL(0, 3, 2); \
+    counterattack   = HAS_SKILL(2, 2, 1); \
+    pain_editor     = HAS_SKILL(2, 2, 2); \
+    quick_draw_avail   |= HAS_SKILL(2, 0, 0); \
+    bt_avail           |= HAS_SKILL(2, 1, 0); \
+    sw_avail           |= HAS_SKILL(2, 3, 2); \
+    gp_avail           |= HAS_SKILL(0, 4, 0); \
+    cr.suppressive_avail |= HAS_SKILL(2, 2, 0); \
+    cr.chrome_rush_avail |= HAS_SKILL(2, 3, 0); \
+    cr.reaper_avail      |= HAS_SKILL(2, 4, 0); \
+    nr.scavenger       = HAS_SKILL(1, 0, 1); \
+    nr.deep_scan       = HAS_SKILL(1, 0, 2); \
+    nr.drone_buddy     = HAS_SKILL(1, 2, 1); \
+    nr.backdoor_king   = HAS_SKILL(1, 3, 0); \
+    nr.remote_det      = HAS_SKILL(1, 3, 2); \
+    nr.overclock_avail |= HAS_SKILL(1, 1, 2); \
+    nr.daemon_avail    |= HAS_SKILL(1, 2, 0); \
+    nr.emp_avail       |= HAS_SKILL(1, 2, 2); \
+    nr.spoof_avail     |= HAS_SKILL(1, 3, 1); \
+    nr.godmode_avail   |= HAS_SKILL(1, 4, 0); \
+    nr.trap_avail       = HAS_SKILL(1, 1, 1); \
+    entity_recalc_stats(player); \
+} while (0)
+
     bool done = false;
     int current_floor = 1;
 
@@ -818,11 +859,13 @@ static GameState game_run(Map *map, Entity *player)
             int drones_before = drones.count;
 
             int ch = getch();
+            int level_before = player->level;
             bool turn_used = handle_input(ch, player, map, &guards, &drones,
                                           &quick_draw_avail, &vent_used,
                                           &bt_avail, &bt_active,
                                           &gp_avail, &gp_timer,
                                           &done, game_msg, &nr, &cr);
+            if (player->level > level_before) LEVELUP_REFRESH();
 
             if (done)
                 break;
@@ -938,8 +981,10 @@ static GameState game_run(Map *map, Entity *player)
                                                     player->x, player->y, &cnt_drop);
                                 if (item_valid(&cnt_drop))
                                     entity_inv_add(player, cnt_drop);
-                                if (guards.count < cnt_before)
-                                    xp_gain(player, cnt_elite ? 50 : 25);
+                                if (guards.count < cnt_before) {
+                                    if (xp_gain(player, cnt_elite ? 50 : 25))
+                                        LEVELUP_REFRESH();
+                                }
                                 snprintf(game_msg, 80, "COUNTERATTACK! (%d dmg)", cnt_dmg);
                                 break;
                             }
@@ -987,7 +1032,7 @@ static GameState game_run(Map *map, Entity *player)
                     return GAME_STATE_DEBRIEF;
                 } else {
                     /* Intermediate floor: descend to next level */
-                    xp_gain(player, 30);
+                    if (xp_gain(player, 30)) LEVELUP_REFRESH();
                     snprintf(game_msg, 80, "DESCENDING -- floor %d of %d  +30 XP",
                              current_floor + 1, num_floors);
                     next_floor = true;
@@ -1000,6 +1045,7 @@ static GameState game_run(Map *map, Entity *player)
         /* if done=true, exit floor loop and return to hub */
     }  /* end floor loop */
 
+#undef LEVELUP_REFRESH
     return GAME_STATE_HUB;
 }
 
@@ -1017,7 +1063,7 @@ int main(void)
     GameState state = GAME_STATE_HUB;
     while (state != GAME_STATE_QUIT) {
         switch (state) {
-        case GAME_STATE_HUB:     state = hub_run(&player);         break;
+        case GAME_STATE_HUB:     state = hub_map_run(&player);     break;
         case GAME_STATE_PLAYING:  state = game_run(&map, &player);  break;
         case GAME_STATE_DEBRIEF:  state = debrief_run(&player);     break;
         case GAME_STATE_DEAD:     state = death_run(&player);       break;
