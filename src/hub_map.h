@@ -14,7 +14,9 @@ typedef enum {
     HUB_NPC_FIXER,      /* mission board             */
     HUB_NPC_MEDIC,      /* consumables / street doc  */
     HUB_NPC_FENCE,      /* sell inventory items      */
-    HUB_NPC_AMBIENT,    /* flavor NPC — dialog only  */
+    HUB_NPC_AMBIENT,    /* flavor NPC — dialog only, may wander */
+    HUB_NPC_BAR,        /* bartender — sells heals for credits */
+    HUB_NPC_INTEL,      /* info broker — sells mission intel   */
 } HubNpcType;
 
 /* ------------------------------------------------------------------ */
@@ -32,9 +34,12 @@ typedef struct {
     char       dialog[HUB_DIALOG_LINES][HUB_DIALOG_LEN];
     int        dialog_count;
     HubNpcType type;
+    /* Wander zone — ambient NPCs roam within this box each turn.
+     * All zeros means the NPC is stationary. */
+    int        wx1, wy1, wx2, wy2;
 } HubNpc;
 
-#define HUB_NPC_MAX 12
+#define HUB_NPC_MAX 16
 
 /* ------------------------------------------------------------------ */
 /* Entry point                                                          */

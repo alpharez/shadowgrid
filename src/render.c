@@ -57,6 +57,8 @@ void render_init(void)
         init_pair(COL_HUB_FENCE,       129,  -1);  /* magenta      */
         init_pair(COL_HUB_MEDIC,        46,  -1);  /* bright green */
         init_pair(COL_HUB_AMBIENT,     245,  -1);  /* medium gray  */
+        init_pair(COL_HUB_BAR,         208,  -1);  /* orange       */
+        init_pair(COL_HUB_INTEL,       135,  -1);  /* dim purple   */
     } else {
         /* 8-color fallback */
         init_pair(COL_FLOOR_VIS,  COLOR_CYAN,    -1);
@@ -97,6 +99,8 @@ void render_init(void)
         init_pair(COL_HUB_FENCE,       COLOR_MAGENTA, -1);
         init_pair(COL_HUB_MEDIC,       COLOR_GREEN,   -1);
         init_pair(COL_HUB_AMBIENT,     COLOR_WHITE,   -1);
+        init_pair(COL_HUB_BAR,         COLOR_YELLOW,  -1);
+        init_pair(COL_HUB_INTEL,       COLOR_MAGENTA, -1);
     }
 }
 

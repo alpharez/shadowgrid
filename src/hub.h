@@ -31,6 +31,9 @@ void hub_levelup_menu(Entity *player);
  * Draws over the current map frame; restores stdscr on close. */
 void mission_inventory(Entity *player);
 
+/* Hub message inbox — defined in hub_map.c, called from debrief_run. */
+void hub_message_add(const char *sender, const char *body);
+
 /* Shop entry points for hub map (called by hub_map.c NPC interactions). */
 void hub_shop_weapons(Entity *player);
 void hub_shop_cybernetics(Entity *player);

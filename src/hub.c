@@ -1733,6 +1733,22 @@ GameState debrief_run(Entity *player)
     delwin(win);
 
     player->pending_loot_count = 0;
+
+    /* Send a follow-up message from J-BONE */
+    {
+        static const char *msgs[] = {
+            "Clean run. Credits are squared. Come see me when you want more work.",
+            "Didn't expect that turnaround. Solid extraction. Credits wired.",
+            "Decent work. A few close calls but you pulled through. Credits sent.",
+            "High-risk, high-reward. That's exactly why I use you. Credits in.",
+            "Ghost Protocol clean. You're the real deal. Talk soon.",
+        };
+        int idx = player->active_mission_difficulty - 1;
+        if (idx < 0) idx = 0;
+        if (idx > 4) idx = 4;
+        hub_message_add("J-BONE", msgs[idx]);
+    }
+
     return GAME_STATE_HUB;
 }
 

@@ -58,6 +58,8 @@
 #define COL_HUB_FENCE        31  /* fence      (magenta)  */
 #define COL_HUB_MEDIC        32  /* street doc (green)    */
 #define COL_HUB_AMBIENT      33  /* ambient NPC (gray)    */
+#define COL_HUB_BAR          34  /* bartender   (orange)  */
+#define COL_HUB_INTEL        35  /* info broker (purple)  */
 
 void render_init(void);
 /* cam_x/cam_y: top-left world tile of the viewport (computed by game loop). */
